@@ -6,12 +6,77 @@ Script para crear mapas interactivos de parroquias específicas con cobertura UM
 
 import geopandas as gpd
 import folium
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, LineString
+from shapely.ops import unary_union
+import numpy as np
+
+def crear_geometria_unificada(intersecciones, parroquia_geom):
+    """Crear una geometría unificada conectando las intersecciones con líneas delgadas"""
+    if len(intersecciones) <= 1:
+        return intersecciones[0] if intersecciones else None, []
+    
+    try:
+        print(f"  Creando geometría unificada para {len(intersecciones)} intersecciones...")
+        
+        # Obtener los centroides de cada intersección
+        centroides = []
+        for interseccion in intersecciones:
+            if not interseccion.is_empty:
+                centroide = interseccion.centroid
+                centroides.append((centroide.x, centroide.y))
+        
+        print(f"  Centroides calculados: {len(centroides)}")
+        
+        # Crear líneas de conexión entre centroides
+        lineas_conexion = []
+        for i in range(len(centroides)):
+            for j in range(i + 1, len(centroides)):
+                linea = LineString([centroides[i], centroides[j]])
+                # Verificar que la línea esté dentro de la parroquia
+                if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
+                    lineas_conexion.append(linea)
+        
+        print(f"  Líneas de conexión creadas: {len(lineas_conexion)}")
+        
+        # Crear buffer más ancho alrededor de las líneas de conexión para formar "puentes" sólidos
+        buffer_width = 0.005  # Aumentar el ancho del puente para mejor conexión
+        puentes = []
+        for linea in lineas_conexion:
+            puente = linea.buffer(buffer_width)
+            puentes.append(puente)
+        
+        print(f"  Puentes creados con buffer de {buffer_width}")
+        
+        # Combinar todas las intersecciones y puentes
+        geometrias_combinadas = intersecciones + puentes
+        
+        # Unir todo en una sola geometría
+        print(f"  Uniendo {len(geometrias_combinadas)} geometrías...")
+        geometria_unificada = unary_union(geometrias_combinadas)
+        
+        # Verificar que la unión fue exitosa
+        if geometria_unificada.is_empty:
+            print(f"  ⚠️ La geometría unificada está vacía, usando solo las intersecciones")
+            geometria_unificada = unary_union(intersecciones)
+        
+        print(f"  ✅ Geometría unificada creada exitosamente")
+        return geometria_unificada, lineas_conexion
+        
+    except Exception as e:
+        print(f"⚠️ Error al crear geometría unificada: {e}")
+        # Si falla, intentar unir solo las intersecciones
+        try:
+            print(f"  Intentando unir solo las intersecciones...")
+            geometria_simple = unary_union(intersecciones)
+            return geometria_simple, []
+        except Exception as e2:
+            print(f"  ❌ Error al unir intersecciones: {e2}")
+            return None, []
 
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
-    NOMBRE_PARROQUIA = "BATAN"  # Cambiar aquí el nombre de la parroquia
+    NOMBRE_PARROQUIA = "YANUNCAY"  # Cambiar aquí el nombre de la parroquia
     RUTA_PARROQUIAS = "LIMITE_PARROQUIAL_CONALI_CNE_2022/LIMITE_PARROQUIAL_CONALI_CNE_2022.shp"
     RUTA_UMTS = "AZUAY SHAPE/AZUAY_UMTS_JUN2023_v4_region.shp"
     
@@ -41,7 +106,7 @@ def crear_mapa_parroquia_con_cobertura():
             gdf_umts = gpd.read_file(RUTA_UMTS)
             print(f"Datos de cobertura UMTS cargados. Total de registros: {len(gdf_umts)}")
             
-            print("Calculando intersecciones...")
+            print("Calculando intersecciones y creando geometría unificada...")
             
             # Crear mapa centrado en Ecuador
             mapa = folium.Map(
@@ -123,32 +188,180 @@ def crear_mapa_parroquia_con_cobertura():
                         interseccion = parroquia_geom.intersection(cobertura_geom)
                         
                         if not interseccion.is_empty:
-                            # Crear un GeoDataFrame con la intersección
-                            interseccion_gdf = gpd.GeoDataFrame(
-                                geometry=[interseccion],
-                                crs=parroquia_encontrada.crs
-                            )
-                            
-                            # Agregar la intersección al mapa con color rojo intenso
-                            folium.GeoJson(
-                                interseccion_gdf,
-                                name=f'Intersección {NOMBRE_PARROQUIA} - Cobertura Alta',
-                                style_function=lambda feature: {
-                                    'fillColor': '#FF0000',  # Rojo intenso
-                                    'color': '#000000',      # Borde negro
-                                    'weight': 3,             # Grosor del borde mayor
-                                    'fillOpacity': 0.8       # Transparencia menor
-                                },
-                                tooltip=f'Intersección: {NOMBRE_PARROQUIA} + Cobertura Alta'
-                            ).add_to(mapa)
-                            
                             intersecciones.append(interseccion)
-                            print(f"✅ Intersección encontrada y agregada al mapa")
+                            print(f"✅ Intersección encontrada")
                         else:
                             print(f"ℹ️ No hay intersección entre {NOMBRE_PARROQUIA} y la zona de cobertura alta")
                             
                     except Exception as e:
                         print(f"⚠️ Error al calcular intersección: {e}")
+            
+            # Si hay intersecciones, procesarlas
+            if intersecciones:
+                print(f"Procesando {len(intersecciones)} intersecciones...")
+                
+                try:
+                    # Obtener la geometría de la parroquia
+                    parroquia_geom = parroquia_encontrada.geometry.iloc[0]
+                    
+                    # Crear geometría unificada
+                    geometria_unificada, lineas_conexion = crear_geometria_unificada(intersecciones, parroquia_geom)
+                    
+                    # Mostrar cada intersección por separado (para visualización)
+                    for i, interseccion in enumerate(intersecciones):
+                        interseccion_gdf = gpd.GeoDataFrame(
+                            geometry=[interseccion],
+                            crs=parroquia_encontrada.crs
+                        )
+                        
+                        folium.GeoJson(
+                            interseccion_gdf,
+                            name=f'Intersección {i+1} {NOMBRE_PARROQUIA} - Cobertura Alta',
+                            style_function=lambda feature: {
+                                'fillColor': '#FF0000',  # Rojo intenso
+                                'color': '#000000',      # Borde negro
+                                'weight': 3,             # Grosor del borde mayor
+                                'fillOpacity': 0.8       # Transparencia menor
+                            },
+                            tooltip=f'Intersección {i+1}: {NOMBRE_PARROQUIA} + Cobertura Alta'
+                        ).add_to(mapa)
+                    
+                    # Crear líneas de conexión manuales si no se crearon automáticamente
+                    if not lineas_conexion:
+                        print(f"Creando líneas de conexión manuales...")
+                        
+                        # Obtener todas las áreas sueltas de todas las intersecciones
+                        todas_las_areas = []
+                        for interseccion in intersecciones:
+                            if hasattr(interseccion, 'geoms'):
+                                # Si es MultiPolygon, agregar cada polígono individual
+                                for geom in interseccion.geoms:
+                                    todas_las_areas.append(geom)
+                            else:
+                                # Si es Polygon simple, agregarlo directamente
+                                todas_las_areas.append(interseccion)
+                        
+                        print(f"  Total de áreas sueltas encontradas: {len(todas_las_areas)}")
+                        
+                        # Crear líneas de conexión entre todas las áreas
+                        lineas_conexion = []
+                        
+                        # Encontrar el área central (la más grande o la primera)
+                        area_central_idx = 0
+                        area_central_size = 0
+                        
+                        for i, area in enumerate(todas_las_areas):
+                            area_size = area.area
+                            if area_size > area_central_size:
+                                area_central_size = area_size
+                                area_central_idx = i
+                        
+                        print(f"  Área central seleccionada: Área {area_central_idx + 1} (tamaño: {area_central_size:.6f})")
+                        
+                        # Conectar cada área suelta solo con el área central
+                        for i, area in enumerate(todas_las_areas):
+                            if i != area_central_idx:  # No conectar el área central consigo misma
+                                # Obtener centroides de las dos áreas
+                                centroide_central = todas_las_areas[area_central_idx].centroid
+                                centroide_area = area.centroid
+                                
+                                # Crear línea entre centroides
+                                linea = LineString([(centroide_central.x, centroide_central.y), (centroide_area.x, centroide_area.y)])
+                                
+                                # Verificar que la línea esté dentro de la parroquia
+                                if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
+                                    lineas_conexion.append(linea)
+                                    print(f"    Conectando Área {i + 1} con Área Central {area_central_idx + 1}")
+                        
+                        print(f"  Líneas de conexión manuales creadas: {len(lineas_conexion)}")
+                    
+                    # Mostrar las líneas de conexión como líneas finas
+                    if lineas_conexion:
+                        print(f"Agregando {len(lineas_conexion)} líneas de conexión...")
+                        
+                        for i, linea in enumerate(lineas_conexion):
+                            # Crear un GeoDataFrame con la línea
+                            linea_gdf = gpd.GeoDataFrame(
+                                geometry=[linea],
+                                crs=parroquia_encontrada.crs
+                            )
+                            
+                            folium.GeoJson(
+                                linea_gdf,
+                                name=f'Línea de Conexión {i+1}',
+                                style_function=lambda feature: {
+                                    'fillColor': 'transparent',  # Sin relleno
+                                    'color': '#800080',         # Morado
+                                    'weight': 5,                # Línea más gruesa para mejor visibilidad
+                                    'fillOpacity': 0.0          # Transparente
+                                },
+                                tooltip=f'Línea de Conexión {i+1}'
+                            ).add_to(mapa)
+                        
+                        print(f"✅ {len(lineas_conexion)} líneas de conexión agregadas")
+                        
+                        # También agregar las líneas como marcadores de línea para mayor visibilidad
+                        print(f"Agregando líneas de conexión como marcadores de línea...")
+                        for i, linea in enumerate(lineas_conexion):
+                            # Obtener las coordenadas de la línea
+                            coords = list(linea.coords)
+                            if len(coords) >= 2:
+                                # Crear una línea de Folium
+                                folium.PolyLine(
+                                    locations=[[coord[1], coord[0]] for coord in coords],  # [lat, lon]
+                                    color='purple',
+                                    weight=4,
+                                    opacity=0.8,
+                                    popup=f'Línea de Conexión {i+1}'
+                                ).add_to(mapa)
+                        
+                        print(f"✅ Líneas de conexión agregadas como marcadores de línea")
+                    else:
+                        print(f"⚠️ No se pudieron crear líneas de conexión")
+                    
+                    # Agregar la geometría unificada como capa separada
+                    if geometria_unificada:
+                        geometria_unificada_gdf = gpd.GeoDataFrame(
+                            geometry=[geometria_unificada],
+                            crs=parroquia_encontrada.crs
+                        )
+                        
+                        folium.GeoJson(
+                            geometria_unificada_gdf,
+                            name=f'Geometría Unificada {NOMBRE_PARROQUIA} - Cobertura Alta',
+                            style_function=lambda feature: {
+                                'fillColor': '#FF6600',  # Naranja para diferenciar
+                                'color': '#800080',      # Borde morado
+                                'weight': 3,             # Borde más grueso
+                                'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
+                            },
+                            tooltip=f'Geometría Unificada: {NOMBRE_PARROQUIA} + Cobertura Alta (Lista para exportar)'
+                        ).add_to(mapa)
+                        
+                        print(f"✅ Geometría unificada creada y agregada al mapa")
+                        
+                        # Guardar la geometría unificada como shapefile para exportar
+                        try:
+                            nombre_shapefile = f"interseccion_unificada_{NOMBRE_PARROQUIA.lower().replace(' ', '_')}.shp"
+                            geometria_unificada_gdf.to_file(nombre_shapefile)
+                            print(f"✅ Geometría unificada guardada como: {nombre_shapefile}")
+                            print(f"   Este archivo está listo para usar en otros sistemas GIS")
+                            
+                            # Verificar que el archivo se creó correctamente
+                            import os
+                            if os.path.exists(nombre_shapefile):
+                                file_size = os.path.getsize(nombre_shapefile)
+                                print(f"   Tamaño del archivo: {file_size} bytes")
+                            else:
+                                print(f"   ⚠️ El archivo no se creó correctamente")
+                                
+                        except Exception as e:
+                            print(f"⚠️ Error al guardar shapefile: {e}")
+                    
+                except Exception as e:
+                    print(f"⚠️ Error al procesar intersecciones: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             # Contar áreas sueltas después de la intersección
             if intersecciones:
@@ -176,6 +389,10 @@ def crear_mapa_parroquia_con_cobertura():
                 
                 if total_areas_sueltas > 1:
                     print(f"  🎯 Las intersecciones generan {total_areas_sueltas} áreas separadas")
+                    if lineas_conexion:
+                        print(f"  🔗 Conectadas con {len(lineas_conexion)} líneas de conexión")
+                    if geometria_unificada:
+                        print(f"  ✅ Unificadas en una sola geometría continua")
                 else:
                     print(f"  🎯 Las intersecciones forman una sola área continua")
                 
@@ -187,7 +404,7 @@ def crear_mapa_parroquia_con_cobertura():
             # Agregar leyenda de colores actualizada
             legend_html = '''
             <div style="position: fixed; 
-                        bottom: 50px; left: 50px; width: 220px; height: auto; 
+                        bottom: 50px; left: 50px; width: 280px; height: auto; 
                         background-color: white; border:2px solid grey; z-index:9999; 
                         font-size:14px; padding: 10px">
             <p><b>Leyenda del Mapa</b></p>
@@ -195,7 +412,9 @@ def crear_mapa_parroquia_con_cobertura():
             <p><i class="fa fa-square" style="color:#FFFF99"></i> Cobertura Media (-95 dBm)</p>
             <p><i class="fa fa-square" style="color:#FFB3B3"></i> Cobertura Baja (-105 dBm)</p>
             <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
-            <p><i class="fa fa-square" style="color:#FF0000"></i> Intersección (Parroquia + Cobertura Alta)</p>
+            <p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>
+            <p><i class="fa fa-minus" style="color:#800080; font-weight:bold"></i> Líneas de Conexión (Puentes)</p>
+            <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Lista para exportar)</p>
             </div>
             '''
             mapa.get_root().html.add_child(folium.Element(legend_html))
@@ -223,7 +442,12 @@ def crear_mapa_parroquia_con_cobertura():
             
             if intersecciones:
                 print(f"  - Intersecciones encontradas: {len(intersecciones)}")
-                print(f"    * Parroquia + Cobertura Alta: Rojo intenso")
+                print(f"    * Mostradas por separado: Rojo intenso")
+                if lineas_conexion:
+                    print(f"    * Líneas de conexión: {len(lineas_conexion)} (moradas)")
+                    print(f"    * Geometría unificada: Naranja (lista para exportar)")
+                else:
+                    print(f"    * No se pudieron crear líneas de conexión")
             else:
                 print(f"  - No se encontraron intersecciones")
             
