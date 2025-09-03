@@ -25,7 +25,7 @@ Este proyecto contiene un script de Python para visualizar los límites de una p
 Abre el archivo `ejemplo_rapido_folium.py` y cambia la variable `NOMBRE_PARROQUIA`:
 
 ```python
-NOMBRE_PARROQUIA = "BATAN"  # Cambiar por el nombre de la parroquia deseada
+NOMBRE_PARROQUIA = "YANUNCAY"  # Cambiar por el nombre de la parroquia deseada
 ```
 
 ### 2. Ejecutar el Script
@@ -43,6 +43,7 @@ El script:
 - Buscará la parroquia especificada
 - Cargará los datos de cobertura UMTS de Azuay
 - Generará un mapa combinado con ambas capas
+- Aplicará colores diferenciados según el nivel de cobertura UMTS
 - Guardará el archivo HTML automáticamente
 - Mostrará información detallada en la consola
 
@@ -50,13 +51,30 @@ El script:
 
 - **Búsqueda específica**: Busca y grafica solo la parroquia especificada
 - **Mapa combinado**: Siempre incluye la parroquia + cobertura UMTS
+- **Colores diferenciados**: Cada nivel de cobertura UMTS tiene su color específico
 - **Mapa interactivo**: Genera archivos HTML que puedes abrir en tu navegador web
 - **Zoom automático**: Se centra automáticamente en la parroquia seleccionada
 - **Popups informativos**: Muestra información detallada al hacer clic
-- **Controles de capas**: Puedes activar/desactivar la parroquia y la cobertura UMTS
-- **Estilos diferenciados**: La parroquia se muestra en rojo, la cobertura UMTS en azul
+- **Controles de capas**: Puedes activar/desactivar la parroquia y cada nivel de cobertura
+- **Leyenda integrada**: Incluye una leyenda explicativa de los colores
 - **Manejo de errores**: Proporciona mensajes claros si algo falla
 - **Exportación web**: Guarda automáticamente el mapa como archivo HTML
+
+## Esquema de Colores de Cobertura UMTS
+
+El script aplica automáticamente colores diferenciados según el nivel de cobertura:
+
+| Nivel de Cobertura | Valor dBm | Color | Descripción |
+|-------------------|-----------|-------|-------------|
+| **Alta** | -85 dBm | 🟢 Verde intenso | Excelente señal, máxima cobertura |
+| **Media** | -95 dBm | 🟡 Amarillo pastel | Buena señal, cobertura moderada |
+| **Baja** | -105 dBm | 🔴 Rojo pastel | Señal débil, cobertura limitada |
+
+### Colores Utilizados:
+- **Verde intenso** (`#00FF00`): Para cobertura alta (-85 dBm)
+- **Amarillo pastel** (`#FFFF99`): Para cobertura media (-95 dBm)  
+- **Rojo pastel** (`#FFB3B3`): Para cobertura baja (-105 dBm)
+- **Rojo** (`#FF6B6B`): Para la parroquia seleccionada
 
 ## Campos de Búsqueda Soportados
 
@@ -64,7 +82,8 @@ El script:
 - `CODPRO`, `PROVINCIA`, `CANTON`, `CODPAR`, `PARROQUIA`, `ESTADO`
 
 ### Cobertura UMTS:
-- Todos los campos disponibles en el shapefile de cobertura
+- `Float`: Nivel de señal en dBm (determina el color)
+- `String`: Información adicional (si está disponible)
 
 ## Datos Disponibles
 
@@ -75,9 +94,10 @@ El script:
 - **Provincias únicas**: 25
 
 ### Cobertura UMTS Azuay (Junio 2023):
-- Datos de cobertura de red móvil en la provincia de Azuay
-- Información técnica de regiones UMTS
-- Útil para análisis de infraestructura de telecomunicaciones
+- **Total de regiones**: 3
+- **Niveles de cobertura**: Alta (-85 dBm), Media (-95 dBm), Baja (-105 dBm)
+- **Información técnica**: Valores de señal en decibelios por miliwatt (dBm)
+- **Útil para**: Análisis de infraestructura de telecomunicaciones
 
 ## Parroquias Disponibles
 
@@ -107,6 +127,17 @@ RUTA_PARROQUIAS = "ruta/a/tu/archivo_parroquias.shp"
 RUTA_UMTS = "ruta/a/tu/archivo_cobertura.shp"
 ```
 
+### Cambiar Colores de Cobertura:
+```python
+# En la función get_color_by_coverage()
+if coverage_level == -85.0:  # Nivel alto
+    return '#00FF00'  # Verde intenso
+elif coverage_level == -95.0:  # Nivel medio
+    return '#FFFF99'  # Amarillo pastel
+elif coverage_level == -105.0:  # Nivel bajo
+    return '#FFB3B3'  # Rojo pastel
+```
+
 ### Cambiar Estilos de Visualización:
 ```python
 # Estilo de la parroquia
@@ -118,11 +149,11 @@ style_function=lambda feature: {
 }
 
 # Estilo de la cobertura UMTS
-style_function=lambda feature: {
-    'fillColor': '#4ECDC4',  # Color de relleno (azul)
+style_function=lambda feature, level=coverage_level: {
+    'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
     'color': '#000000',      # Color del borde (negro)
     'weight': 1,             # Grosor del borde
-    'fillOpacity': 0.3       # Transparencia
+    'fillOpacity': 0.6       # Transparencia
 }
 ```
 
@@ -169,30 +200,21 @@ Los archivos shapefile contienen:
 - Visualizar límites administrativos de parroquias específicas
 - Analizar cobertura de servicios en áreas específicas
 - Planificar infraestructura y servicios por parroquia
+- Identificar áreas con necesidades de mejora en telecomunicaciones
 
 ### Para Analistas de Telecomunicaciones:
 - Estudiar cobertura de red en parroquias específicas
 - Comparar cobertura con límites administrativos
 - Identificar áreas con necesidades de infraestructura
+- Analizar la calidad de señal por región geográfica
 
 ### Para Investigadores:
 - Análisis geográfico de parroquias específicas
 - Estudios de cobertura de servicios por área
 - Investigación en geografía y telecomunicaciones
+- Análisis de patrones de cobertura móvil
 
 ## Ejemplos de Uso
-
-### Parroquia BATAN:
-```python
-NOMBRE_PARROQUIA = "BATAN"
-```
-Resultado: `mapa_parroquia_batan_con_cobertura.html`
-
-### Parroquia BAÑOS:
-```python
-NOMBRE_PARROQUIA = "BAÑOS"
-```
-Resultado: `mapa_parroquia_baños_con_cobertura.html`
 
 ### Parroquia YANUNCAY:
 ```python
@@ -200,14 +222,38 @@ NOMBRE_PARROQUIA = "YANUNCAY"
 ```
 Resultado: `mapa_parroquia_yanuncay_con_cobertura.html`
 
+### Parroquia BAÑOS:
+```python
+NOMBRE_PARROQUIA = "BAÑOS"
+```
+Resultado: `mapa_parroquia_baños_con_cobertura.html`
+
+### Parroquia BATAN:
+```python
+NOMBRE_PARROQUIA = "BATAN"
+```
+Resultado: `mapa_parroquia_batan_con_cobertura.html`
+
 ## Estructura del Mapa Generado
 
 El mapa HTML incluye:
 1. **Capa de Parroquia**: Muestra solo la parroquia seleccionada en rojo
-2. **Capa de Cobertura UMTS**: Muestra toda la cobertura de Azuay en azul transparente
-3. **Controles de Capas**: Permite activar/desactivar cada capa
-4. **Popups Informativos**: Muestra datos al hacer clic en cada elemento
-5. **Zoom Automático**: Se centra automáticamente en la parroquia
+2. **Capa de Cobertura Alta**: Verde intenso para señal -85 dBm
+3. **Capa de Cobertura Media**: Amarillo pastel para señal -95 dBm
+4. **Capa de Cobertura Baja**: Rojo pastel para señal -105 dBm
+5. **Controles de Capas**: Permite activar/desactivar cada capa individualmente
+6. **Leyenda Integrada**: Explica el significado de cada color
+7. **Popups Informativos**: Muestra datos al hacer clic en cada elemento
+
+## Interpretación de los Valores dBm
+
+Los valores de cobertura UMTS se miden en decibelios por miliwatt (dBm):
+
+- **-85 dBm**: Excelente señal, máxima velocidad de datos
+- **-95 dBm**: Buena señal, velocidad de datos moderada
+- **-105 dBm**: Señal débil, velocidad de datos limitada
+
+**Nota**: Los valores más negativos indican señal más débil.
 
 ## Licencia
 

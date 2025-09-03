@@ -49,20 +49,79 @@ def crear_mapa_parroquia_con_cobertura():
                 tiles='OpenStreetMap'
             )
             
-            # Agregar la parroquia específica de la manera más simple
+            # Agregar la parroquia específica
             folium.GeoJson(
                 parroquia_encontrada,
-                name=f'Parroquia {NOMBRE_PARROQUIA}'
+                name=f'Parroquia {NOMBRE_PARROQUIA}',
+                style_function=lambda feature: {
+                    'fillColor': 'blue',  # Rojo para la parroquia
+                    'color': '#000000',      # Borde negro
+                    'weight': 2,             # Grosor del borde
+                    'fillOpacity': 0.7       # Transparencia
+                }
             ).add_to(mapa)
             
-            # Agregar cobertura UMTS de la manera más simple
-            folium.GeoJson(
-                gdf_umts,
-                name='Cobertura UMTS Azuay'
-            ).add_to(mapa)
+            # Función para determinar el color según el nivel de cobertura
+            def get_color_by_coverage(feature):
+                coverage_level = feature['properties']['Float']
+                if coverage_level == -85.0:  # Nivel alto
+                    return '#00FF00'  # Verde intenso
+                elif coverage_level == -95.0:  # Nivel medio
+                    return '#FFFF99'  # Amarillo pastel
+                elif coverage_level == -105.0:  # Nivel bajo
+                    return '#FFB3B3'  # Rojo pastel
+                else:
+                    return '#808080'  # Gris por defecto
+            
+            # Función para obtener el nombre del nivel de cobertura
+            def get_coverage_name(feature):
+                coverage_level = feature['properties']['Float']
+                if coverage_level == -85.0:
+                    return 'Cobertura Alta (-85 dBm)'
+                elif coverage_level == -95.0:
+                    return 'Cobertura Media (-95 dBm)'
+                elif coverage_level == -105.0:
+                    return 'Cobertura Baja (-105 dBm)'
+                else:
+                    return f'Cobertura ({coverage_level} dBm)'
+            
+            # Agregar cada nivel de cobertura UMTS con su color correspondiente
+            for idx, row in gdf_umts.iterrows():
+                coverage_level = row['Float']
+                coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
+                
+                # Crear un GeoDataFrame con solo esta fila
+                single_region = gdf_umts.iloc[[idx]]
+                
+                folium.GeoJson(
+                    single_region,
+                    name=coverage_name,
+                    style_function=lambda feature, level=coverage_level: {
+                        'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
+                        'color': '#000000',      # Borde negro
+                        'weight': 1,             # Grosor del borde
+                        'fillOpacity': 0.6       # Transparencia
+                    },
+                    tooltip=coverage_name
+                ).add_to(mapa)
             
             # Agregar controles de capas
             folium.LayerControl().add_to(mapa)
+            
+            # Agregar leyenda de colores
+            legend_html = '''
+            <div style="position: fixed; 
+                        bottom: 50px; left: 50px; width: 200px; height: auto; 
+                        background-color: white; border:2px solid grey; z-index:9999; 
+                        font-size:14px; padding: 10px">
+            <p><b>Leyenda de Cobertura UMTS</b></p>
+            <p><i class="fa fa-square" style="color:#00FF00"></i> Alta (-85 dBm)</p>
+            <p><i class="fa fa-square" style="color:#FFFF99"></i> Media (-95 dBm)</p>
+            <p><i class="fa fa-square" style="color:#FFB3B3"></i> Baja (-105 dBm)</p>
+            <p><i class="fa fa-square" style="color:#FF6B6B"></i> Parroquia</p>
+            </div>
+            '''
+            mapa.get_root().html.add_child(folium.Element(legend_html))
             
             # Guardar mapa
             nombre_archivo = f"mapa_parroquia_{NOMBRE_PARROQUIA.lower().replace(' ', '_')}_con_cobertura.html"
@@ -75,6 +134,15 @@ def crear_mapa_parroquia_con_cobertura():
             print(f"  - Parroquia: {NOMBRE_PARROQUIA}")
             print(f"  - Número de polígonos de parroquia: {len(parroquia_encontrada)}")
             print(f"  - Número de regiones UMTS: {len(gdf_umts)}")
+            print(f"  - Niveles de cobertura:")
+            for idx, row in gdf_umts.iterrows():
+                level = row['Float']
+                if level == -85.0:
+                    print(f"    * Alta (-85 dBm): Verde intenso")
+                elif level == -95.0:
+                    print(f"    * Media (-95 dBm): Amarillo pastel")
+                elif level == -105.0:
+                    print(f"    * Baja (-105 dBm): Rojo pastel")
             
         else:
             print(f"No se encontró la parroquia '{NOMBRE_PARROQUIA}'")
