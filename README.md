@@ -42,8 +42,10 @@ El script:
 - Cargará los datos del shapefile de límites parroquiales
 - Buscará la parroquia especificada
 - Cargará los datos de cobertura UMTS de Azuay
-- Generará un mapa combinado con ambas capas
+- Calculará las intersecciones entre la parroquia y las zonas de cobertura alta
+- Generará un mapa combinado con todas las capas
 - Aplicará colores diferenciados según el nivel de cobertura UMTS
+- Resaltará las intersecciones con color rojo intenso
 - Guardará el archivo HTML automáticamente
 - Mostrará información detallada en la consola
 
@@ -52,29 +54,50 @@ El script:
 - **Búsqueda específica**: Busca y grafica solo la parroquia especificada
 - **Mapa combinado**: Siempre incluye la parroquia + cobertura UMTS
 - **Colores diferenciados**: Cada nivel de cobertura UMTS tiene su color específico
+- **Intersecciones resaltadas**: Las áreas donde la parroquia se superpone con cobertura alta se muestran en rojo intenso
 - **Mapa interactivo**: Genera archivos HTML que puedes abrir en tu navegador web
 - **Zoom automático**: Se centra automáticamente en la parroquia seleccionada
 - **Popups informativos**: Muestra información detallada al hacer clic
-- **Controles de capas**: Puedes activar/desactivar la parroquia y cada nivel de cobertura
-- **Leyenda integrada**: Incluye una leyenda explicativa de los colores
+- **Controles de capas**: Puedes activar/desactivar la parroquia, cada nivel de cobertura e intersecciones
+- **Leyenda integrada**: Incluye una leyenda explicativa de todos los colores
 - **Manejo de errores**: Proporciona mensajes claros si algo falla
 - **Exportación web**: Guarda automáticamente el mapa como archivo HTML
 
-## Esquema de Colores de Cobertura UMTS
+## Esquema de Colores del Mapa
 
-El script aplica automáticamente colores diferenciados según el nivel de cobertura:
+El script aplica automáticamente colores diferenciados según el nivel de cobertura y las intersecciones:
 
-| Nivel de Cobertura | Valor dBm | Color | Descripción |
-|-------------------|-----------|-------|-------------|
-| **Alta** | -85 dBm | 🟢 Verde intenso | Excelente señal, máxima cobertura |
-| **Media** | -95 dBm | 🟡 Amarillo pastel | Buena señal, cobertura moderada |
-| **Baja** | -105 dBm | 🔴 Rojo pastel | Señal débil, cobertura limitada |
+| Elemento | Color | Descripción |
+|----------|-------|-------------|
+| **Parroquia** | 🔵 Azul | Límites administrativos de la parroquia seleccionada |
+| **Cobertura Alta** | 🟢 Verde intenso | Excelente señal (-85 dBm), máxima cobertura |
+| **Cobertura Media** | 🟡 Amarillo pastel | Buena señal (-95 dBm), cobertura moderada |
+| **Cobertura Baja** | 🔴 Rojo pastel | Señal débil (-105 dBm), cobertura limitada |
+| **Intersección** | 🔴 Rojo intenso | Área donde la parroquia se superpone con cobertura alta |
 
 ### Colores Utilizados:
+- **Azul** (`blue`): Para la parroquia seleccionada
 - **Verde intenso** (`#00FF00`): Para cobertura alta (-85 dBm)
 - **Amarillo pastel** (`#FFFF99`): Para cobertura media (-95 dBm)  
 - **Rojo pastel** (`#FFB3B3`): Para cobertura baja (-105 dBm)
-- **Rojo** (`#FF6B6B`): Para la parroquia seleccionada
+- **Rojo intenso** (`#FF0000`): Para intersecciones (parroquia + cobertura alta)
+
+## Funcionalidad de Intersecciones
+
+### ¿Qué son las Intersecciones?
+Las intersecciones son las áreas geográficas donde la parroquia seleccionada se superpone con las zonas de cobertura alta (-85 dBm). Estas áreas son especialmente importantes porque:
+
+- **Indican la mejor cobertura** dentro de la parroquia
+- **Permiten identificar** dónde los habitantes tendrán mejor servicio móvil
+- **Ayudan en la planificación** de infraestructura y servicios
+- **Proporcionan información visual** clara sobre la calidad de cobertura
+
+### Cálculo Automático:
+El script calcula automáticamente estas intersecciones usando operaciones geométricas:
+1. Identifica las zonas de cobertura alta (-85 dBm)
+2. Calcula la intersección geométrica con la parroquia
+3. Visualiza el resultado en rojo intenso
+4. Permite activar/desactivar esta capa independientemente
 
 ## Campos de Búsqueda Soportados
 
@@ -138,11 +161,22 @@ elif coverage_level == -105.0:  # Nivel bajo
     return '#FFB3B3'  # Rojo pastel
 ```
 
+### Cambiar Color de Intersecciones:
+```python
+# En el estilo de la intersección
+style_function=lambda feature: {
+    'fillColor': '#FF0000',  # Rojo intenso para intersecciones
+    'color': '#000000',      # Borde negro
+    'weight': 3,             # Grosor del borde mayor
+    'fillOpacity': 0.8       # Transparencia menor
+}
+```
+
 ### Cambiar Estilos de Visualización:
 ```python
 # Estilo de la parroquia
 style_function=lambda feature: {
-    'fillColor': '#FF6B6B',  # Color de relleno (rojo)
+    'fillColor': 'blue',     # Color de relleno (azul)
     'color': '#000000',      # Color del borde (negro)
     'weight': 2,             # Grosor del borde
     'fillOpacity': 0.7       # Transparencia
@@ -170,6 +204,14 @@ style_function=lambda feature, level=coverage_level: {
 1. Verifica que las rutas a los archivos .shp sean correctas
 2. Asegúrate de que todos los archivos del shapefile estén presentes (.shp, .shx, .dbf, .prj)
 3. Verifica que tengas permisos de lectura en las carpetas
+
+### Error al Calcular Intersecciones
+
+Si hay problemas con el cálculo de intersecciones:
+
+1. Verifica que las geometrías de los shapefiles sean válidas
+2. Asegúrate de que ambos datasets tengan el mismo sistema de coordenadas
+3. El script mostrará mensajes informativos sobre el proceso
 
 ### Error de Dependencias
 
@@ -201,18 +243,21 @@ Los archivos shapefile contienen:
 - Analizar cobertura de servicios en áreas específicas
 - Planificar infraestructura y servicios por parroquia
 - Identificar áreas con necesidades de mejora en telecomunicaciones
+- **Priorizar inversiones** en zonas con mejor cobertura
 
 ### Para Analistas de Telecomunicaciones:
 - Estudiar cobertura de red en parroquias específicas
 - Comparar cobertura con límites administrativos
 - Identificar áreas con necesidades de infraestructura
 - Analizar la calidad de señal por región geográfica
+- **Evaluar la eficiencia** de la cobertura en áreas específicas
 
 ### Para Investigadores:
 - Análisis geográfico de parroquias específicas
 - Estudios de cobertura de servicios por área
 - Investigación en geografía y telecomunicaciones
 - Análisis de patrones de cobertura móvil
+- **Estudios de impacto** de la infraestructura de telecomunicaciones
 
 ## Ejemplos de Uso
 
@@ -221,6 +266,7 @@ Los archivos shapefile contienen:
 NOMBRE_PARROQUIA = "YANUNCAY"
 ```
 Resultado: `mapa_parroquia_yanuncay_con_cobertura.html`
+- ✅ Intersección encontrada: Parroquia + Cobertura Alta
 
 ### Parroquia BAÑOS:
 ```python
@@ -237,13 +283,14 @@ Resultado: `mapa_parroquia_batan_con_cobertura.html`
 ## Estructura del Mapa Generado
 
 El mapa HTML incluye:
-1. **Capa de Parroquia**: Muestra solo la parroquia seleccionada en rojo
+1. **Capa de Parroquia**: Muestra solo la parroquia seleccionada en azul
 2. **Capa de Cobertura Alta**: Verde intenso para señal -85 dBm
 3. **Capa de Cobertura Media**: Amarillo pastel para señal -95 dBm
 4. **Capa de Cobertura Baja**: Rojo pastel para señal -105 dBm
-5. **Controles de Capas**: Permite activar/desactivar cada capa individualmente
-6. **Leyenda Integrada**: Explica el significado de cada color
-7. **Popups Informativos**: Muestra datos al hacer clic en cada elemento
+5. **Capa de Intersección**: Rojo intenso para áreas de parroquia + cobertura alta
+6. **Controles de Capas**: Permite activar/desactivar cada capa individualmente
+7. **Leyenda Integrada**: Explica el significado de todos los colores
+8. **Popups Informativos**: Muestra datos al hacer clic en cada elemento
 
 ## Interpretación de los Valores dBm
 
@@ -254,6 +301,20 @@ Los valores de cobertura UMTS se miden en decibelios por miliwatt (dBm):
 - **-105 dBm**: Señal débil, velocidad de datos limitada
 
 **Nota**: Los valores más negativos indican señal más débil.
+
+## Análisis de Intersecciones
+
+### ¿Por qué son importantes las intersecciones?
+
+1. **Calidad de Servicio**: Las áreas de intersección tienen la mejor cobertura posible
+2. **Planificación Urbana**: Ayudan a identificar zonas con mejor infraestructura
+3. **Desarrollo Económico**: Las áreas con mejor cobertura suelen ser más atractivas para inversiones
+4. **Servicios Públicos**: Permiten optimizar la ubicación de servicios que requieren conectividad
+
+### Interpretación Visual:
+- **Rojo intenso**: Zonas con excelente cobertura dentro de la parroquia
+- **Verde + Azul**: Zonas de cobertura alta fuera de la parroquia
+- **Solo Azul**: Áreas de la parroquia sin cobertura alta
 
 ## Licencia
 

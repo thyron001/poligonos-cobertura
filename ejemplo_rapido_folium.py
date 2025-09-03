@@ -6,6 +6,7 @@ Script para crear mapas interactivos de parroquias específicas con cobertura UM
 
 import geopandas as gpd
 import folium
+from shapely.geometry import Polygon, MultiPolygon
 
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
@@ -40,7 +41,7 @@ def crear_mapa_parroquia_con_cobertura():
             gdf_umts = gpd.read_file(RUTA_UMTS)
             print(f"Datos de cobertura UMTS cargados. Total de registros: {len(gdf_umts)}")
             
-            print("Creando mapa interactivo...")
+            print("Calculando intersecciones...")
             
             # Crear mapa centrado en Ecuador
             mapa = folium.Map(
@@ -54,7 +55,7 @@ def crear_mapa_parroquia_con_cobertura():
                 parroquia_encontrada,
                 name=f'Parroquia {NOMBRE_PARROQUIA}',
                 style_function=lambda feature: {
-                    'fillColor': 'blue',  # Rojo para la parroquia
+                    'fillColor': 'blue',  # Azul para la parroquia
                     'color': '#000000',      # Borde negro
                     'weight': 2,             # Grosor del borde
                     'fillOpacity': 0.7       # Transparencia
@@ -85,6 +86,9 @@ def crear_mapa_parroquia_con_cobertura():
                 else:
                     return f'Cobertura ({coverage_level} dBm)'
             
+            # Lista para almacenar las intersecciones
+            intersecciones = []
+            
             # Agregar cada nivel de cobertura UMTS con su color correspondiente
             for idx, row in gdf_umts.iterrows():
                 coverage_level = row['Float']
@@ -93,6 +97,7 @@ def crear_mapa_parroquia_con_cobertura():
                 # Crear un GeoDataFrame con solo esta fila
                 single_region = gdf_umts.iloc[[idx]]
                 
+                # Agregar la capa de cobertura
                 folium.GeoJson(
                     single_region,
                     name=coverage_name,
@@ -104,21 +109,62 @@ def crear_mapa_parroquia_con_cobertura():
                     },
                     tooltip=coverage_name
                 ).add_to(mapa)
+                
+                # Si es cobertura alta, calcular intersección con la parroquia
+                if coverage_level == -85.0:
+                    print(f"Calculando intersección con cobertura alta...")
+                    
+                    # Obtener la geometría de la parroquia y la zona de cobertura alta
+                    parroquia_geom = parroquia_encontrada.geometry.iloc[0]
+                    cobertura_geom = row.geometry
+                    
+                    # Calcular la intersección
+                    try:
+                        interseccion = parroquia_geom.intersection(cobertura_geom)
+                        
+                        if not interseccion.is_empty:
+                            # Crear un GeoDataFrame con la intersección
+                            interseccion_gdf = gpd.GeoDataFrame(
+                                geometry=[interseccion],
+                                crs=parroquia_encontrada.crs
+                            )
+                            
+                            # Agregar la intersección al mapa con color rojo intenso
+                            folium.GeoJson(
+                                interseccion_gdf,
+                                name=f'Intersección {NOMBRE_PARROQUIA} - Cobertura Alta',
+                                style_function=lambda feature: {
+                                    'fillColor': '#FF0000',  # Rojo intenso
+                                    'color': '#000000',      # Borde negro
+                                    'weight': 3,             # Grosor del borde mayor
+                                    'fillOpacity': 0.8       # Transparencia menor
+                                },
+                                tooltip=f'Intersección: {NOMBRE_PARROQUIA} + Cobertura Alta'
+                            ).add_to(mapa)
+                            
+                            intersecciones.append(interseccion)
+                            print(f"✅ Intersección encontrada y agregada al mapa")
+                        else:
+                            print(f"ℹ️ No hay intersección entre {NOMBRE_PARROQUIA} y la zona de cobertura alta")
+                            
+                    except Exception as e:
+                        print(f"⚠️ Error al calcular intersección: {e}")
             
             # Agregar controles de capas
             folium.LayerControl().add_to(mapa)
             
-            # Agregar leyenda de colores
+            # Agregar leyenda de colores actualizada
             legend_html = '''
             <div style="position: fixed; 
-                        bottom: 50px; left: 50px; width: 200px; height: auto; 
+                        bottom: 50px; left: 50px; width: 220px; height: auto; 
                         background-color: white; border:2px solid grey; z-index:9999; 
                         font-size:14px; padding: 10px">
-            <p><b>Leyenda de Cobertura UMTS</b></p>
-            <p><i class="fa fa-square" style="color:#00FF00"></i> Alta (-85 dBm)</p>
-            <p><i class="fa fa-square" style="color:#FFFF99"></i> Media (-95 dBm)</p>
-            <p><i class="fa fa-square" style="color:#FFB3B3"></i> Baja (-105 dBm)</p>
-            <p><i class="fa fa-square" style="color:#FF6B6B"></i> Parroquia</p>
+            <p><b>Leyenda del Mapa</b></p>
+            <p><i class="fa fa-square" style="color:#00FF00"></i> Cobertura Alta (-85 dBm)</p>
+            <p><i class="fa fa-square" style="color:#FFFF99"></i> Cobertura Media (-95 dBm)</p>
+            <p><i class="fa fa-square" style="color:#FFB3B3"></i> Cobertura Baja (-105 dBm)</p>
+            <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
+            <p><i class="fa fa-square" style="color:#FF0000"></i> Intersección (Parroquia + Cobertura Alta)</p>
             </div>
             '''
             mapa.get_root().html.add_child(folium.Element(legend_html))
@@ -143,6 +189,12 @@ def crear_mapa_parroquia_con_cobertura():
                     print(f"    * Media (-95 dBm): Amarillo pastel")
                 elif level == -105.0:
                     print(f"    * Baja (-105 dBm): Rojo pastel")
+            
+            if intersecciones:
+                print(f"  - Intersecciones encontradas: {len(intersecciones)}")
+                print(f"    * Parroquia + Cobertura Alta: Rojo intenso")
+            else:
+                print(f"  - No se encontraron intersecciones")
             
         else:
             print(f"No se encontró la parroquia '{NOMBRE_PARROQUIA}'")
