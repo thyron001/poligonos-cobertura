@@ -1,10 +1,10 @@
-# Visualizador de Mapas - Parroquias y Cobertura UMTS
+# Visualizador de Mapas - Parroquias con Cobertura UMTS
 
-Este proyecto contiene un script de Python para visualizar los límites de parroquias específicas y la cobertura UMTS de Azuay usando archivos shapefile del Consejo Nacional Electoral (CNE) de Ecuador y datos de cobertura móvil.
+Este proyecto contiene un script de Python para visualizar los límites de una parroquia específica junto con la cobertura UMTS de Azuay usando archivos shapefile del Consejo Nacional Electoral (CNE) de Ecuador y datos de cobertura móvil.
 
 ## Archivos del Proyecto
 
-- `ejemplo_rapido_folium.py` - Script principal para crear mapas interactivos
+- `ejemplo_rapido_folium.py` - Script principal para crear mapas combinados
 - `requirements.txt` - Dependencias de Python necesarias
 - `LIMITE_PARROQUIAL_CONALI_CNE_2022/` - Carpeta con archivos shapefile de límites parroquiales
 - `AZUAY SHAPE/` - Carpeta con archivos shapefile de cobertura UMTS de Azuay
@@ -20,7 +20,15 @@ Este proyecto contiene un script de Python para visualizar los límites de parro
 
 ## Uso del Script
 
-### Ejecutar el Script
+### 1. Configurar la Parroquia
+
+Abre el archivo `ejemplo_rapido_folium.py` y cambia la variable `NOMBRE_PARROQUIA`:
+
+```python
+NOMBRE_PARROQUIA = "BATAN"  # Cambiar por el nombre de la parroquia deseada
+```
+
+### 2. Ejecutar el Script
 
 En tu terminal, navega al directorio del proyecto y ejecuta:
 
@@ -28,38 +36,27 @@ En tu terminal, navega al directorio del proyecto y ejecuta:
 py ejemplo_rapido_folium.py
 ```
 
-### Opciones Disponibles
+### 3. Resultado
 
-El script te mostrará un menú con las siguientes opciones:
-
-#### 1. **Crear mapa de parroquia específica**
-- Busca y grafica una parroquia específica
-- Muestra límites administrativos
-- Incluye información de parroquia, cantón, provincia y estado
-
-#### 2. **Crear mapa de cobertura UMTS de Azuay**
-- Visualiza la cobertura de red móvil UMTS en la provincia de Azuay
-- Muestra regiones de cobertura con información técnica
-- Útil para análisis de infraestructura de telecomunicaciones
-
-#### 3. **Crear mapa combinado (parroquias + cobertura)**
-- Combina ambos datasets en un solo mapa
-- Muestra parroquias del cantón Cuenca junto con la cobertura UMTS
-- Permite comparar límites administrativos con cobertura de red
-- Incluye controles de capas para alternar entre vistas
-
-#### 4. **Salir**
-- Cierra el programa
+El script:
+- Cargará los datos del shapefile de límites parroquiales
+- Buscará la parroquia especificada
+- Cargará los datos de cobertura UMTS de Azuay
+- Generará un mapa combinado con ambas capas
+- Guardará el archivo HTML automáticamente
+- Mostrará información detallada en la consola
 
 ## Características del Script
 
-- **Búsqueda inteligente**: Busca la parroquia en diferentes campos del shapefile
+- **Búsqueda específica**: Busca y grafica solo la parroquia especificada
+- **Mapa combinado**: Siempre incluye la parroquia + cobertura UMTS
 - **Mapa interactivo**: Genera archivos HTML que puedes abrir en tu navegador web
-- **Zoom y navegación**: Puedes hacer zoom, pan y explorar los datos
+- **Zoom automático**: Se centra automáticamente en la parroquia seleccionada
 - **Popups informativos**: Muestra información detallada al hacer clic
-- **Controles de capas**: En mapas combinados, puedes activar/desactivar capas
+- **Controles de capas**: Puedes activar/desactivar la parroquia y la cobertura UMTS
+- **Estilos diferenciados**: La parroquia se muestra en rojo, la cobertura UMTS en azul
 - **Manejo de errores**: Proporciona mensajes claros si algo falla
-- **Exportación web**: Guarda automáticamente los mapas como archivos HTML
+- **Exportación web**: Guarda automáticamente el mapa como archivo HTML
 
 ## Campos de Búsqueda Soportados
 
@@ -96,7 +93,7 @@ El script te mostrará un menú con las siguientes opciones:
 
 ## Personalización
 
-### Cambiar Parroquia (Opción 1):
+### Cambiar Parroquia:
 ```python
 NOMBRE_PARROQUIA = "TU_PARROQUIA_AQUI"
 ```
@@ -104,10 +101,29 @@ NOMBRE_PARROQUIA = "TU_PARROQUIA_AQUI"
 ### Cambiar Rutas de Shapefiles:
 ```python
 # Para límites parroquiales
-RUTA_SHAPEFILE = "ruta/a/tu/archivo_parroquias.shp"
+RUTA_PARROQUIAS = "ruta/a/tu/archivo_parroquias.shp"
 
 # Para cobertura UMTS
-RUTA_SHAPEFILE = "ruta/a/tu/archivo_cobertura.shp"
+RUTA_UMTS = "ruta/a/tu/archivo_cobertura.shp"
+```
+
+### Cambiar Estilos de Visualización:
+```python
+# Estilo de la parroquia
+style_function=lambda feature: {
+    'fillColor': '#FF6B6B',  # Color de relleno (rojo)
+    'color': '#000000',      # Color del borde (negro)
+    'weight': 2,             # Grosor del borde
+    'fillOpacity': 0.7       # Transparencia
+}
+
+# Estilo de la cobertura UMTS
+style_function=lambda feature: {
+    'fillColor': '#4ECDC4',  # Color de relleno (azul)
+    'color': '#000000',      # Color del borde (negro)
+    'weight': 1,             # Grosor del borde
+    'fillOpacity': 0.3       # Transparencia
+}
 ```
 
 ## Solución de Problemas
@@ -120,9 +136,9 @@ RUTA_SHAPEFILE = "ruta/a/tu/archivo_cobertura.shp"
 
 ### Error: "No se pudo cargar el shapefile"
 
-1. Verifica que la ruta al archivo .shp sea correcta
+1. Verifica que las rutas a los archivos .shp sean correctas
 2. Asegúrate de que todos los archivos del shapefile estén presentes (.shp, .shx, .dbf, .prj)
-3. Verifica que tengas permisos de lectura en la carpeta
+3. Verifica que tengas permisos de lectura en las carpetas
 
 ### Error de Dependencias
 
@@ -150,35 +166,48 @@ Los archivos shapefile contienen:
 ## Casos de Uso
 
 ### Para Administradores Públicos:
-- Visualizar límites administrativos de parroquias
-- Analizar cobertura de servicios en diferentes áreas
-- Planificar infraestructura y servicios
+- Visualizar límites administrativos de parroquias específicas
+- Analizar cobertura de servicios en áreas específicas
+- Planificar infraestructura y servicios por parroquia
 
 ### Para Analistas de Telecomunicaciones:
-- Estudiar cobertura de red en la provincia de Azuay
+- Estudiar cobertura de red en parroquias específicas
 - Comparar cobertura con límites administrativos
 - Identificar áreas con necesidades de infraestructura
 
 ### Para Investigadores:
-- Análisis geográfico de límites administrativos
-- Estudios de cobertura de servicios
+- Análisis geográfico de parroquias específicas
+- Estudios de cobertura de servicios por área
 - Investigación en geografía y telecomunicaciones
 
 ## Ejemplos de Uso
 
-### Mapa de Parroquia:
+### Parroquia BATAN:
+```python
+NOMBRE_PARROQUIA = "BATAN"
+```
+Resultado: `mapa_parroquia_batan_con_cobertura.html`
+
+### Parroquia BAÑOS:
 ```python
 NOMBRE_PARROQUIA = "BAÑOS"
 ```
-Resultado: `mapa_parroquia_baños.html`
+Resultado: `mapa_parroquia_baños_con_cobertura.html`
 
-### Mapa de Cobertura UMTS:
-Opción 2 del menú
-Resultado: `mapa_cobertura_umts_azuay.html`
+### Parroquia YANUNCAY:
+```python
+NOMBRE_PARROQUIA = "YANUNCAY"
+```
+Resultado: `mapa_parroquia_yanuncay_con_cobertura.html`
 
-### Mapa Combinado:
-Opción 3 del menú
-Resultado: `mapa_combinado_cuenca_umts.html`
+## Estructura del Mapa Generado
+
+El mapa HTML incluye:
+1. **Capa de Parroquia**: Muestra solo la parroquia seleccionada en rojo
+2. **Capa de Cobertura UMTS**: Muestra toda la cobertura de Azuay en azul transparente
+3. **Controles de Capas**: Permite activar/desactivar cada capa
+4. **Popups Informativos**: Muestra datos al hacer clic en cada elemento
+5. **Zoom Automático**: Se centra automáticamente en la parroquia
 
 ## Licencia
 
