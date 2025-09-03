@@ -11,7 +11,7 @@ from shapely.geometry import Polygon, MultiPolygon
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
-    NOMBRE_PARROQUIA = "YANUNCAY"  # Cambiar aquí el nombre de la parroquia
+    NOMBRE_PARROQUIA = "BATAN"  # Cambiar aquí el nombre de la parroquia
     RUTA_PARROQUIAS = "LIMITE_PARROQUIAL_CONALI_CNE_2022/LIMITE_PARROQUIAL_CONALI_CNE_2022.shp"
     RUTA_UMTS = "AZUAY SHAPE/AZUAY_UMTS_JUN2023_v4_region.shp"
     
@@ -149,6 +149,37 @@ def crear_mapa_parroquia_con_cobertura():
                             
                     except Exception as e:
                         print(f"⚠️ Error al calcular intersección: {e}")
+            
+            # Contar áreas sueltas después de la intersección
+            if intersecciones:
+                print(f"\n" + "="*60)
+                print("ANÁLISIS DE ÁREAS SUELTAS DESPUÉS DE LA INTERSECCIÓN")
+                print("="*60)
+                
+                # Contar el número total de áreas sueltas
+                total_areas_sueltas = 0
+                
+                for i, interseccion in enumerate(intersecciones):
+                    if hasattr(interseccion, 'geoms'):
+                        # Si es MultiPolygon, contar cada polígono individual
+                        num_areas = len(interseccion.geoms)
+                        total_areas_sueltas += num_areas
+                        print(f"  Intersección {i+1}: {num_areas} área(s) suelta(s)")
+                    else:
+                        # Si es Polygon simple, es 1 área
+                        total_areas_sueltas += 1
+                        print(f"  Intersección {i+1}: 1 área suelta")
+                
+                print(f"\n📊 RESUMEN:")
+                print(f"  Total de intersecciones encontradas: {len(intersecciones)}")
+                print(f"  Total de áreas sueltas: {total_areas_sueltas}")
+                
+                if total_areas_sueltas > 1:
+                    print(f"  🎯 Las intersecciones generan {total_areas_sueltas} áreas separadas")
+                else:
+                    print(f"  🎯 Las intersecciones forman una sola área continua")
+                
+                print("="*60)
             
             # Agregar controles de capas
             folium.LayerControl().add_to(mapa)
