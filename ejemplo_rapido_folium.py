@@ -11,6 +11,7 @@ from shapely.geometry import Polygon, MultiPolygon, LineString
 from shapely.ops import unary_union
 import numpy as np
 import os
+import zipfile
 
 def obtener_ruta_geojson_provincia(nombre_provincia):
     """Obtener la ruta del archivo GeoJSON de la provincia especificada"""
@@ -34,6 +35,25 @@ def obtener_ruta_geojson_provincia(nombre_provincia):
             print(f"     - El directorio geojson_provincias no existe")
         
         return None
+
+def exportar_a_kmz(geodataframe, nombre_archivo):
+    """Exportar GeoDataFrame a archivo KMZ"""
+    try:
+        # Primero exportar a KML
+        nombre_kml = nombre_archivo.replace('.kmz', '.kml')
+        geodataframe.to_file(nombre_kml, driver='KML')
+        
+        # Crear archivo KMZ (que es un ZIP con el KML)
+        with zipfile.ZipFile(nombre_archivo, 'w', zipfile.ZIP_DEFLATED) as kmz_file:
+            kmz_file.write(nombre_kml, os.path.basename(nombre_kml))
+        
+        # Eliminar el archivo KML temporal
+        os.remove(nombre_kml)
+        
+        return True
+    except Exception as e:
+        print(f"⚠️ Error al exportar a KMZ: {e}")
+        return False
 
 def crear_geometria_unificada(intersecciones, parroquia_geom):
     """Crear una geometría unificada conectando las intersecciones con líneas delgadas"""
@@ -333,10 +353,12 @@ def crear_mapa_parroquia_con_cobertura():
                             crs=parroquia_encontrada.crs
                         )
                         
-                        # Exportar la geometría unificada a shapefile
-                        nombre_shapefile = f"geometria_unificada_{NOMBRE_PARROQUIA.lower()}.shp"
-                        geometria_unificada_gdf.to_file(nombre_shapefile)
-                        print(f"  ✅ Geometría unificada exportada: {nombre_shapefile}")
+                        # Exportar la geometría unificada a KMZ
+                        nombre_kmz = f"geometria_unificada_{NOMBRE_PARROQUIA.lower()}.kmz"
+                        if exportar_a_kmz(geometria_unificada_gdf, nombre_kmz):
+                            print(f"  ✅ Geometría unificada exportada: {nombre_kmz}")
+                        else:
+                            print(f"  ❌ Error al exportar geometría unificada a KMZ")
                         
                         folium.GeoJson(
                             geometria_unificada_gdf,
@@ -347,7 +369,7 @@ def crear_mapa_parroquia_con_cobertura():
                                 'weight': 3,             # Borde más grueso
                                 'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
                             },
-                            tooltip=f'Geometría Unificada: {NOMBRE_PARROQUIA} + Cobertura Alta (Lista para exportar)'
+                            tooltip=f'Geometría Unificada: {NOMBRE_PARROQUIA} + Cobertura Alta (Exportada a KMZ)'
                         ).add_to(mapa)
                         
                         print(f"✅ Geometría unificada creada y agregada al mapa")
@@ -410,7 +432,7 @@ def crear_mapa_parroquia_con_cobertura():
             <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
             <p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>
             <p><i class="fa fa-square" style="color:#FF6600"></i> Caminos de Conexión (Tomate + Borde Morado)</p>
-            <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Lista para exportar)</p>
+            <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>
             </div>
             '''
             mapa.get_root().html.add_child(folium.Element(legend_html))
@@ -443,7 +465,7 @@ def crear_mapa_parroquia_con_cobertura():
                 print(f"    * Mostradas por separado: Rojo intenso")
                 if lineas_conexion:
                     print(f"    * Líneas de conexión: {len(lineas_conexion)} (moradas)")
-                    print(f"    * Geometría unificada: Naranja (lista para exportar)")
+                    print(f"    * Geometría unificada: Naranja (exportada a KMZ)")
                 else:
                     print(f"    * No se pudieron crear líneas de conexión")
             else:
