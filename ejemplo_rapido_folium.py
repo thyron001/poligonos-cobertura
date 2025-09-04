@@ -38,8 +38,8 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
         
         print(f"  Líneas de conexión creadas: {len(lineas_conexion)}")
         
-        # Crear buffer más ancho alrededor de las líneas de conexión para formar "puentes" sólidos
-        buffer_width = 0.005  # Aumentar el ancho del puente para mejor conexión
+        # Crear buffer SÚPER ancho alrededor de las líneas de conexión para formar "puentes" sólidos
+        buffer_width = 10  # Buffer EXTREMADAMENTE ancho para crear corredores muy visibles
         puentes = []
         for linea in lineas_conexion:
             puente = linea.buffer(buffer_width)
@@ -205,7 +205,7 @@ def crear_mapa_parroquia_con_cobertura():
                     parroquia_geom = parroquia_encontrada.geometry.iloc[0]
                     
                     # Crear geometría unificada
-                    geometria_unificada, lineas_conexion = crear_geometria_unificada(intersecciones, parroquia_geom)
+                    geometria_unificada, caminos_conexion = crear_geometria_unificada(intersecciones, parroquia_geom)
                     
                     # Mostrar cada intersección por separado (para visualización)
                     for i, interseccion in enumerate(intersecciones):
@@ -227,7 +227,7 @@ def crear_mapa_parroquia_con_cobertura():
                         ).add_to(mapa)
                     
                     # Crear líneas de conexión manuales si no se crearon automáticamente
-                    if not lineas_conexion:
+                    if not caminos_conexion:
                         print(f"Creando líneas de conexión manuales...")
                         
                         # Obtener todas las áreas sueltas de todas las intersecciones
@@ -274,50 +274,43 @@ def crear_mapa_parroquia_con_cobertura():
                                     print(f"    Conectando Área {i + 1} con Área Central {area_central_idx + 1}")
                         
                         print(f"  Líneas de conexión manuales creadas: {len(lineas_conexion)}")
-                    
-                    # Mostrar las líneas de conexión como líneas finas
-                    if lineas_conexion:
-                        print(f"Agregando {len(lineas_conexion)} líneas de conexión...")
                         
-                        for i, linea in enumerate(lineas_conexion):
-                            # Crear un GeoDataFrame con la línea
-                            linea_gdf = gpd.GeoDataFrame(
-                                geometry=[linea],
+                        # Crear caminos anchos (corredores) en lugar de líneas delgadas
+                        caminos_conexion = []
+                        for linea in lineas_conexion:
+                            # Crear un camino EXTREMADAMENTE ancho usando buffer súper grande
+                            camino_ancho = linea.buffer(10)  # Buffer SÚPER ancho para crear corredor muy visible
+                            caminos_conexion.append(camino_ancho)
+                        
+                        print(f"  Caminos de conexión creados: {len(caminos_conexion)}")
+                    
+                    # Mostrar los caminos de conexión como corredores anchos
+                    if 'caminos_conexion' in locals() and caminos_conexion:
+                        print(f"Agregando {len(caminos_conexion)} caminos de conexión...")
+                        
+                        for i, camino in enumerate(caminos_conexion):
+                            # Crear un GeoDataFrame con el camino
+                            camino_gdf = gpd.GeoDataFrame(
+                                geometry=[camino],
                                 crs=parroquia_encontrada.crs
                             )
                             
                             folium.GeoJson(
-                                linea_gdf,
-                                name=f'Línea de Conexión {i+1}',
+                                camino_gdf,
+                                name=f'Camino de Conexión {i+1}',
                                 style_function=lambda feature: {
-                                    'fillColor': 'transparent',  # Sin relleno
-                                    'color': '#800080',         # Morado
-                                    'weight': 5,                # Línea más gruesa para mejor visibilidad
-                                    'fillOpacity': 0.0          # Transparente
+                                    'fillColor': '#FF6600',     # Tomate para el relleno
+                                    'color': '#800080',         # Morado para el borde
+                                    'weight': 3,                # Borde grueso
+                                    'fillOpacity': 0.8,         # Relleno sólido
+                                    'opacity': 1.0              # Borde completamente opaco
                                 },
-                                tooltip=f'Línea de Conexión {i+1}'
+                                tooltip=f'Camino de Conexión {i+1}'
                             ).add_to(mapa)
                         
-                        print(f"✅ {len(lineas_conexion)} líneas de conexión agregadas")
-                        
-                        # También agregar las líneas como marcadores de línea para mayor visibilidad
-                        print(f"Agregando líneas de conexión como marcadores de línea...")
-                        for i, linea in enumerate(lineas_conexion):
-                            # Obtener las coordenadas de la línea
-                            coords = list(linea.coords)
-                            if len(coords) >= 2:
-                                # Crear una línea de Folium
-                                folium.PolyLine(
-                                    locations=[[coord[1], coord[0]] for coord in coords],  # [lat, lon]
-                                    color='purple',
-                                    weight=4,
-                                    opacity=0.8,
-                                    popup=f'Línea de Conexión {i+1}'
-                                ).add_to(mapa)
-                        
-                        print(f"✅ Líneas de conexión agregadas como marcadores de línea")
+                        print(f"✅ {len(caminos_conexion)} caminos de conexión agregados")
                     else:
-                        print(f"⚠️ No se pudieron crear líneas de conexión")
+                        print(f"⚠️ No se pudieron crear caminos de conexión")
                     
                     # Agregar la geometría unificada como capa separada
                     if geometria_unificada:
@@ -413,7 +406,7 @@ def crear_mapa_parroquia_con_cobertura():
             <p><i class="fa fa-square" style="color:#FFB3B3"></i> Cobertura Baja (-105 dBm)</p>
             <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
             <p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>
-            <p><i class="fa fa-minus" style="color:#800080; font-weight:bold"></i> Líneas de Conexión (Puentes)</p>
+            <p><i class="fa fa-square" style="color:#FF6600"></i> Caminos de Conexión (Tomate + Borde Morado)</p>
             <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Lista para exportar)</p>
             </div>
             '''
