@@ -132,8 +132,8 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
             st.error(f"Error al unir intersecciones: {e2}")
             return None, []
 
-def procesar_cobertura(archivo_subido, provincia, parroquia, operadora, año, tecnologia):
-    """Procesar el archivo de cobertura y generar la geometría unificada"""
+def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provincia, parroquia, operadora, año, tecnologia):
+    """Procesar los archivos de cobertura y generar la geometría unificada"""
     
     # Cargar datos de parroquias desde GeoJSON
     ruta_geojson = obtener_ruta_geojson_provincia(provincia)
@@ -157,41 +157,30 @@ def procesar_cobertura(archivo_subido, provincia, parroquia, operadora, año, te
             st.error(f"No se encontró la parroquia '{parroquia}' en la provincia '{provincia}'")
             return None, None
         
-        # Procesar archivo de cobertura
-        file_extension = archivo_subido.name.split('.')[-1].lower()
-        
-        with tempfile.NamedTemporaryFile(suffix=f'.{file_extension}', delete=False) as tmp_file:
-            tmp_file.write(archivo_subido.getvalue())
-            tmp_file.flush()
+        # Procesar archivos de cobertura
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Guardar todos los archivos en el directorio temporal
+            archivos_shapefile = {
+                'shp': archivo_shp,
+                'shx': archivo_shx,
+                'dbf': archivo_dbf,
+                'prj': archivo_prj
+            }
             
-            # Extraer y cargar shapefile
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                if file_extension == 'zip':
-                    import zipfile
-                    with zipfile.ZipFile(tmp_file.name, 'r') as zip_ref:
-                        zip_ref.extractall(tmp_dir)
-                elif file_extension == 'rar':
-                    try:
-                        import py7zr
-                        with py7zr.SevenZipFile(tmp_file.name, mode='r') as rar_ref:
-                            rar_ref.extractall(tmp_dir)
-                    except ImportError:
-                        st.error("Para archivos RAR se requiere la biblioteca py7zr. Por favor, usa archivos ZIP.")
-                        return None, None
-                else:
-                    st.error("Formato de archivo no soportado. Use ZIP o RAR.")
-                    return None, None
-                
-                # Buscar archivo .shp
-                shp_files = list(Path(tmp_dir).glob('*.shp'))
-                if not shp_files:
-                    st.error("No se encontró archivo .shp en el archivo subido")
-                    return None, None
-                
-                gdf_cobertura = gpd.read_file(shp_files[0])
-        
-        # Limpiar archivo temporal
-        os.unlink(tmp_file.name)
+            rutas_archivos = {}
+            for extension, archivo in archivos_shapefile.items():
+                if archivo:
+                    ruta_archivo = os.path.join(tmp_dir, f"cobertura.{extension}")
+                    with open(ruta_archivo, 'wb') as f:
+                        f.write(archivo.getvalue())
+                    rutas_archivos[extension] = ruta_archivo
+            
+            # Cargar el shapefile usando el archivo .shp
+            if 'shp' in rutas_archivos:
+                gdf_cobertura = gpd.read_file(rutas_archivos['shp'])
+            else:
+                st.error("No se pudo cargar el archivo .shp")
+                return None, None, None
         
         # Calcular intersecciones
         intersecciones = []
@@ -418,14 +407,74 @@ with col1:
         index=0
     )
     
-    # Carga de archivo
+    # Carga de archivos shapefile
     st.markdown("---")
-    st.subheader("📁 Archivo de Cobertura")
-    archivo_subido = st.file_uploader(
-        "Sube el archivo de cobertura (ZIP o RAR):",
-        type=['zip', 'rar'],
-        help="El archivo debe contener un shapefile (.shp, .shx, .dbf, .prj)"
-    )
+    st.subheader("📁 Archivos de Cobertura")
+    st.markdown("**Sube los 4 archivos del shapefile (drag & drop):**")
+    
+    # Información sobre los archivos requeridos
+    with st.expander("ℹ️ Información sobre los archivos shapefile"):
+        st.markdown("""
+        Un shapefile completo requiere 4 archivos:
+        - **.shp** - Archivo principal con la geometría
+        - **.shx** - Archivo de índice
+        - **.dbf** - Archivo de atributos
+        - **.prj** - Archivo de proyección
+        
+        Todos los archivos deben tener el mismo nombre base.
+        """)
+    
+    col_shp, col_shx = st.columns(2)
+    with col_shp:
+        archivo_shp = st.file_uploader(
+            "Archivo .shp (principal):",
+            type=['shp'],
+            key="shp_file"
+        )
+    with col_shx:
+        archivo_shx = st.file_uploader(
+            "Archivo .shx (índice):",
+            type=['shx'],
+            key="shx_file"
+        )
+    
+    col_dbf, col_prj = st.columns(2)
+    with col_dbf:
+        archivo_dbf = st.file_uploader(
+            "Archivo .dbf (atributos):",
+            type=['dbf'],
+            key="dbf_file"
+        )
+    with col_prj:
+        archivo_prj = st.file_uploader(
+            "Archivo .prj (proyección):",
+            type=['prj'],
+            key="prj_file"
+        )
+    
+    # Verificar que todos los archivos estén subidos
+    archivos_completos = all([archivo_shp, archivo_shx, archivo_dbf, archivo_prj])
+    
+    if archivos_completos:
+        # Verificar que los archivos tengan el mismo nombre base
+        nombres_base = []
+        for archivo in [archivo_shp, archivo_shx, archivo_dbf, archivo_prj]:
+            if archivo:
+                nombre_base = archivo.name.rsplit('.', 1)[0]  # Remover extensión
+                nombres_base.append(nombre_base)
+        
+        if len(set(nombres_base)) == 1:
+            st.success("✅ Todos los archivos del shapefile están listos")
+        else:
+            st.error("❌ Los archivos deben tener el mismo nombre base")
+            st.warning("Ejemplo: cobertura.shp, cobertura.shx, cobertura.dbf, cobertura.prj")
+    else:
+        archivos_faltantes = []
+        if not archivo_shp: archivos_faltantes.append(".shp")
+        if not archivo_shx: archivos_faltantes.append(".shx")
+        if not archivo_dbf: archivos_faltantes.append(".dbf")
+        if not archivo_prj: archivos_faltantes.append(".prj")
+        st.warning(f"⚠️ Faltan archivos: {', '.join(archivos_faltantes)}")
     
     # Botón de conversión
     st.markdown("---")
@@ -434,10 +483,10 @@ with col1:
 with col2:
     st.header("🗺️ Mapa de Resultados")
     
-    if convertir and archivo_subido and parroquia:
+    if convertir and archivos_completos and parroquia:
         with st.spinner("Procesando cobertura..."):
             geometria_unificada, parroquia_encontrada, intersecciones = procesar_cobertura(
-                archivo_subido, provincia, parroquia, operadora, año, tecnologia
+                archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provincia, parroquia, operadora, año, tecnologia
             )
         
         if geometria_unificada is not None:
@@ -520,7 +569,7 @@ Esta aplicación permite analizar la cobertura de telecomunicaciones en parroqui
 **Proceso:**
 1. Selecciona la provincia y parroquia
 2. Configura la operadora, año y tecnología
-3. Sube el archivo de cobertura (ZIP/RAR con shapefile)
+3. Sube los 4 archivos del shapefile (.shp, .shx, .dbf, .prj)
 4. Haz clic en "Convertir" para procesar
 5. Descarga el resultado en formato KMZ
 
