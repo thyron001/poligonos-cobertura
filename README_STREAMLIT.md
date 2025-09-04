@@ -6,7 +6,7 @@ Esta aplicación permite analizar la cobertura de telecomunicaciones en parroqui
 
 - **Interfaz web intuitiva** con Streamlit
 - **Soporte para 6 provincias**: Azuay, Cañar, El Oro, Loja, Morona Santiago, Zamora Chinchipe
-- **Carga de archivos**: 4 archivos shapefile por separado (.shp, .shx, .dbf, .prj)
+- **Carga de archivos**: ZIP o RAR con shapefiles de cobertura
 - **Selectores configurables**: Provincia, Parroquia, Operadora, Año, Tecnología
 - **Visualización interactiva**: Mapas de Folium con geometría unificada
 - **Exportación automática**: Descarga de archivos KMZ con formato personalizado
@@ -42,7 +42,7 @@ requirements.txt
 1. **Seleccionar provincia**: Elige una de las 6 provincias disponibles
 2. **Seleccionar parroquia**: Se cargan automáticamente las parroquias de la provincia
 3. **Configurar parámetros**: Operadora (Movistar, Claro, CNT), Año, Tecnología (2G, 3G, 4G)
-4. **Subir archivos**: Los 4 archivos del shapefile (.shp, .shx, .dbf, .prj)
+4. **Subir archivo**: Archivo ZIP o RAR con shapefile de cobertura
 5. **Convertir**: Procesar la cobertura y generar geometría unificada
 6. **Descargar**: Obtener el archivo KMZ resultante
 
@@ -59,4 +59,4 @@ requirements.txt
 - **GeoPandas**: Procesamiento de datos geoespaciales
 - **Folium**: Visualización de mapas interactivos
 - **Shapely**: Operaciones geométricas
-- **Drag & Drop**: Carga fácil de archivos shapefile
+- **Py7zr**: Soporte para archivos RAR
