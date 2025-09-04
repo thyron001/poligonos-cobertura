@@ -262,13 +262,8 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
         
-        # Debug temporal para ver las coordenadas
-        st.write(f"Debug - Centro del mapa: lat={center_lat}, lon={center_lon}")
-        st.write(f"Debug - Bounds: {bounds}")
-        
         # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
         if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
-            st.write("⚠️ Coordenadas fuera de Ecuador, usando coordenadas por defecto")
             center_lat, center_lon = -2.0, -78.0  # Centro de Ecuador
         
         # Crear mapa centrado en la geometría unificada
@@ -279,7 +274,6 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         )
         
         # Agregar la parroquia específica
-        st.write(f"Debug - Agregando parroquia: {len(parroquia_encontrada)} registros")
         folium.GeoJson(
             parroquia_encontrada,
             name=f'Parroquia {parroquia}',
@@ -316,7 +310,6 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 return f'Cobertura ({coverage_level} dBm)'
         
         # Agregar cada nivel de cobertura UMTS con su color correspondiente
-        st.write(f"Debug - Agregando {len(gdf_cobertura)} regiones de cobertura")
         for idx, row in gdf_cobertura.iterrows():
             coverage_level = row['Float']
             coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
@@ -394,6 +387,18 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         </div>
         '''
         mapa.get_root().html.add_child(folium.Element(legend_html))
+        
+        # CENTRAR EL MAPA EN LA GEOMETRÍA UNIFICADA
+        if geometria_unificada and not geometria_unificada.is_empty:
+            # Obtener los bounds de la geometría unificada
+            bounds = geometria_unificada.bounds
+            # fit_bounds espera [[lat_min, lon_min], [lat_max, lon_max]]
+            # bounds es (minx, miny, maxx, maxy) = (lon_min, lat_min, lon_max, lat_max)
+            mapa.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+        else:
+            # Si no hay geometría unificada, centrar en la parroquia
+            bounds = parroquia_encontrada.geometry.iloc[0].bounds
+            mapa.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
         
         return mapa
         
@@ -524,17 +529,9 @@ if convertir and archivos_completos and parroquia:
             provincia, parroquia, operadora, año, tecnologia
         )
         
-        # Debug temporal
-        st.write(f"Debug - geometria_unificada: {geometria_unificada is not None}")
-        st.write(f"Debug - parroquia_encontrada: {parroquia_encontrada is not None}")
-        st.write(f"Debug - intersecciones: {len(intersecciones) if intersecciones else 0}")
-        st.write(f"Debug - gdf_cobertura: {gdf_cobertura is not None}")
-        
         if geometria_unificada is not None:
             # Crear el mapa
             mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
-            
-            st.write(f"Debug - mapa creado: {mapa is not None}")
             
             if mapa:
                 # Mostrar el mapa
