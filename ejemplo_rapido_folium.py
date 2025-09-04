@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Script para crear mapas interactivos de parroquias específicas con cobertura UMTS usando Folium
+Ahora usa archivos GeoJSON por provincia para mejor rendimiento y organización
 """
 
 import geopandas as gpd
@@ -9,6 +10,30 @@ import folium
 from shapely.geometry import Polygon, MultiPolygon, LineString
 from shapely.ops import unary_union
 import numpy as np
+import os
+
+def obtener_ruta_geojson_provincia(nombre_provincia):
+    """Obtener la ruta del archivo GeoJSON de la provincia especificada"""
+    # Normalizar el nombre de la provincia para el archivo
+    nombre_archivo = nombre_provincia.lower().replace(' ', '_').replace('ñ', 'n').replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+    ruta_geojson = f"geojson_provincias/{nombre_archivo}.geojson"
+    
+    # Verificar que el archivo existe
+    if os.path.exists(ruta_geojson):
+        return ruta_geojson
+    else:
+        print(f"⚠️ No se encontró el archivo GeoJSON para la provincia: {nombre_provincia}")
+        print(f"   Ruta buscada: {ruta_geojson}")
+        print(f"   Archivos disponibles en geojson_provincias/:")
+        
+        if os.path.exists("geojson_provincias"):
+            archivos = [f for f in os.listdir("geojson_provincias") if f.endswith('.geojson')]
+            for archivo in sorted(archivos):
+                print(f"     - {archivo}")
+        else:
+            print(f"     - El directorio geojson_provincias no existe")
+        
+        return None
 
 def crear_geometria_unificada(intersecciones, parroquia_geom):
     """Crear una geometría unificada conectando las intersecciones con líneas delgadas"""
@@ -77,15 +102,22 @@ def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
     NOMBRE_PARROQUIA = "BATAN"  # Cambiar aquí el nombre de la parroquia
-    RUTA_PARROQUIAS = "LIMITE_PARROQUIAL_CONALI_CNE_2022/LIMITE_PARROQUIAL_CONALI_CNE_2022.shp"
+    NOMBRE_PROVINCIA = "AZUAY"  # Cambiar aquí el nombre de la provincia
     RUTA_UMTS = "AZUAY SHAPE/AZUAY_UMTS_JUN2023_v4_region.shp"
     
-    print(f"Buscando parroquia: {NOMBRE_PARROQUIA}")
+    print(f"Buscando parroquia: {NOMBRE_PARROQUIA} en provincia: {NOMBRE_PROVINCIA}")
     
     try:
-        # Cargar datos de parroquias
-        print("Cargando límites parroquiales...")
-        gdf_parroquias = gpd.read_file(RUTA_PARROQUIAS)
+        # Obtener ruta del GeoJSON de la provincia
+        ruta_geojson_provincia = obtener_ruta_geojson_provincia(NOMBRE_PROVINCIA)
+        
+        if ruta_geojson_provincia is None:
+            print(f"❌ No se pudo encontrar el archivo GeoJSON para la provincia: {NOMBRE_PROVINCIA}")
+            return
+        
+        # Cargar datos de parroquias desde el GeoJSON de la provincia
+        print(f"Cargando límites parroquiales desde: {ruta_geojson_provincia}")
+        gdf_parroquias = gpd.read_file(ruta_geojson_provincia)
         print(f"Datos de parroquias cargados. Total de registros: {len(gdf_parroquias)}")
         
         # Buscar la parroquia específica
@@ -392,6 +424,8 @@ def crear_mapa_parroquia_con_cobertura():
             # Mostrar información
             print(f"\nInformación del mapa:")
             print(f"  - Parroquia: {NOMBRE_PARROQUIA}")
+            print(f"  - Provincia: {NOMBRE_PROVINCIA}")
+            print(f"  - Archivo GeoJSON usado: {ruta_geojson_provincia}")
             print(f"  - Número de polígonos de parroquia: {len(parroquia_encontrada)}")
             print(f"  - Número de regiones UMTS: {len(gdf_umts)}")
             print(f"  - Niveles de cobertura:")
@@ -416,15 +450,20 @@ def crear_mapa_parroquia_con_cobertura():
                 print(f"  - No se encontraron intersecciones")
             
         else:
-            print(f"No se encontró la parroquia '{NOMBRE_PARROQUIA}'")
-            print("Verifica el nombre de la parroquia en la variable NOMBRE_PARROQUIA")
+            print(f"No se encontró la parroquia '{NOMBRE_PARROQUIA}' en la provincia '{NOMBRE_PROVINCIA}'")
+            print("Verifica:")
+            print(f"  - El nombre de la parroquia en la variable NOMBRE_PARROQUIA")
+            print(f"  - El nombre de la provincia en la variable NOMBRE_PROVINCIA")
+            print(f"  - Que el archivo GeoJSON existe: {ruta_geojson_provincia}")
             
     except Exception as e:
         print(f"Error: {e}")
         print("Verifica que:")
         print("1. Las dependencias estén instaladas: pip install -r requirements.txt")
-        print("2. Las rutas a los shapefiles sean correctas")
-        print("3. Los archivos .shp, .shx, .dbf, .prj estén presentes")
+        print("2. Los archivos GeoJSON de provincias estén creados (ejecuta crear_geojson_provincias.py)")
+        print("3. El archivo GeoJSON de la provincia especificada exista")
+        print("4. Las rutas a los archivos UMTS sean correctas")
+        print("5. Los archivos .shp, .shx, .dbf, .prj estén presentes")
 
 if __name__ == "__main__":
     crear_mapa_parroquia_con_cobertura()
