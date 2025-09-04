@@ -395,19 +395,6 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         '''
         mapa.get_root().html.add_child(folium.Element(legend_html))
         
-        # CENTRAR EL MAPA EN LA GEOMETRÍA UNIFICADA
-        if geometria_unificada and not geometria_unificada.is_empty:
-            # Obtener los bounds de la geometría unificada
-            bounds = geometria_unificada.bounds
-            # fit_bounds espera [[lat_min, lon_min], [lat_max, lon_max]]
-            mapa.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-            st.write(f"✅ Mapa centrado en geometría unificada")
-        else:
-            # Si no hay geometría unificada, centrar en la parroquia
-            bounds = parroquia_encontrada.geometry.iloc[0].bounds
-            mapa.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-            st.write(f"✅ Mapa centrado en parroquia")
-        
         return mapa
         
     except Exception as e:
