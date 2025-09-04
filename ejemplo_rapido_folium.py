@@ -76,7 +76,7 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
-    NOMBRE_PARROQUIA = "BATAN"  # Cambiar aquí el nombre de la parroquia
+    NOMBRE_PARROQUIA = "YANUNCAY"  # Cambiar aquí el nombre de la parroquia
     RUTA_PARROQUIAS = "LIMITE_PARROQUIAL_CONALI_CNE_2022/LIMITE_PARROQUIAL_CONALI_CNE_2022.shp"
     RUTA_UMTS = "AZUAY SHAPE/AZUAY_UMTS_JUN2023_v4_region.shp"
     
@@ -243,37 +243,33 @@ def crear_mapa_parroquia_con_cobertura():
                         
                         print(f"  Total de áreas sueltas encontradas: {len(todas_las_areas)}")
                         
-                        # Crear líneas de conexión entre todas las áreas
+                        # Crear líneas de conexión secuenciales (una con la siguiente)
                         lineas_conexion = []
                         
-                        # Encontrar el área central (la más grande o la primera)
-                        area_central_idx = 0
-                        area_central_size = 0
+                        # Ordenar las áreas por su posición (de izquierda a derecha usando el centroide X)
+                        areas_ordenadas = sorted(enumerate(todas_las_areas), key=lambda x: x[1].centroid.x)
+                        indices_ordenados = [idx for idx, _ in areas_ordenadas]
                         
-                        for i, area in enumerate(todas_las_areas):
-                            area_size = area.area
-                            if area_size > area_central_size:
-                                area_central_size = area_size
-                                area_central_idx = i
+                        print(f"  Áreas ordenadas de izquierda a derecha: {[i+1 for i in indices_ordenados]}")
                         
-                        print(f"  Área central seleccionada: Área {area_central_idx + 1} (tamaño: {area_central_size:.6f})")
+                        # Conectar cada área con la siguiente (cadena secuencial)
+                        for i in range(len(indices_ordenados) - 1):
+                            idx_actual = indices_ordenados[i]
+                            idx_siguiente = indices_ordenados[i + 1]
+                            
+                            # Obtener centroides de las dos áreas consecutivas
+                            centroide_actual = todas_las_areas[idx_actual].centroid
+                            centroide_siguiente = todas_las_areas[idx_siguiente].centroid
+                            
+                            # Crear línea entre centroides consecutivos
+                            linea = LineString([(centroide_actual.x, centroide_actual.y), (centroide_siguiente.x, centroide_siguiente.y)])
+                            
+                            # Verificar que la línea esté dentro de la parroquia
+                            if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
+                                lineas_conexion.append(linea)
+                                print(f"    Conectando Área {idx_actual + 1} con Área {idx_siguiente + 1}")
                         
-                        # Conectar cada área suelta solo con el área central
-                        for i, area in enumerate(todas_las_areas):
-                            if i != area_central_idx:  # No conectar el área central consigo misma
-                                # Obtener centroides de las dos áreas
-                                centroide_central = todas_las_areas[area_central_idx].centroid
-                                centroide_area = area.centroid
-                                
-                                # Crear línea entre centroides
-                                linea = LineString([(centroide_central.x, centroide_central.y), (centroide_area.x, centroide_area.y)])
-                                
-                                # Verificar que la línea esté dentro de la parroquia
-                                if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
-                                    lineas_conexion.append(linea)
-                                    print(f"    Conectando Área {i + 1} con Área Central {area_central_idx + 1}")
-                        
-                        print(f"  Líneas de conexión manuales creadas: {len(lineas_conexion)}")
+                        print(f"  Líneas de conexión secuenciales creadas: {len(lineas_conexion)}")
                         
                         # Crear caminos anchos (corredores) en lugar de líneas delgadas
                         caminos_conexion = []
