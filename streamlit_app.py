@@ -498,7 +498,7 @@ with col1:
     # Carga de archivos shapefile
     st.markdown("---")
     st.subheader("📁 Archivos de Cobertura")
-    st.markdown("**Sube los 4 archivos del shapefile (drag & drop):**")
+    st.markdown("**Sube los 4 archivos del shapefile (drag & drop múltiple):**")
     
     # Información sobre los archivos requeridos
     with st.expander("ℹ️ Información sobre los archivos shapefile"):
@@ -509,60 +509,74 @@ with col1:
         - **.dbf** - Archivo de atributos
         - **.prj** - Archivo de proyección
         
+        **Puedes arrastrar y soltar los 4 archivos a la vez.**
         Todos los archivos deben tener el mismo nombre base.
         """)
     
-    col_shp, col_shx = st.columns(2)
-    with col_shp:
-        archivo_shp = st.file_uploader(
-            "Archivo .shp (principal):",
-            type=['shp'],
-            key="shp_file"
-        )
-    with col_shx:
-        archivo_shx = st.file_uploader(
-            "Archivo .shx (índice):",
-            type=['shx'],
-            key="shx_file"
-        )
+    # Un solo file uploader que acepta múltiples archivos
+    archivos_subidos = st.file_uploader(
+        "Arrastra y suelta los 4 archivos del shapefile:",
+        type=['shp', 'shx', 'dbf', 'prj'],
+        accept_multiple_files=True,
+        help="Selecciona o arrastra los 4 archivos: .shp, .shx, .dbf, .prj"
+    )
     
-    col_dbf, col_prj = st.columns(2)
-    with col_dbf:
-        archivo_dbf = st.file_uploader(
-            "Archivo .dbf (atributos):",
-            type=['dbf'],
-            key="dbf_file"
-        )
-    with col_prj:
-        archivo_prj = st.file_uploader(
-            "Archivo .prj (proyección):",
-            type=['prj'],
-            key="prj_file"
-        )
+    # Procesar los archivos subidos
+    archivos_completos = False
+    archivo_shp = None
+    archivo_shx = None
+    archivo_dbf = None
+    archivo_prj = None
     
-    # Verificar que todos los archivos estén subidos
-    archivos_completos = all([archivo_shp, archivo_shx, archivo_dbf, archivo_prj])
-    
-    if archivos_completos:
-        # Verificar que los archivos tengan el mismo nombre base
-        nombres_base = []
-        for archivo in [archivo_shp, archivo_shx, archivo_dbf, archivo_prj]:
-            if archivo:
-                nombre_base = archivo.name.rsplit('.', 1)[0]  # Remover extensión
-                nombres_base.append(nombre_base)
-        
-        if len(set(nombres_base)) == 1:
-            st.success("✅ Todos los archivos del shapefile están listos")
+    if archivos_subidos:
+        # Verificar que se subieron exactamente 4 archivos
+        if len(archivos_subidos) != 4:
+            st.error(f"❌ Se requieren exactamente 4 archivos. Subiste {len(archivos_subidos)} archivos.")
         else:
-            st.error("❌ Los archivos deben tener el mismo nombre base")
-            st.warning("Ejemplo: cobertura.shp, cobertura.shx, cobertura.dbf, cobertura.prj")
-    else:
-        archivos_faltantes = []
-        if not archivo_shp: archivos_faltantes.append(".shp")
-        if not archivo_shx: archivos_faltantes.append(".shx")
-        if not archivo_dbf: archivos_faltantes.append(".dbf")
-        if not archivo_prj: archivos_faltantes.append(".prj")
-        st.warning(f"⚠️ Faltan archivos: {', '.join(archivos_faltantes)}")
+            # Organizar los archivos por extensión
+            archivos_por_extension = {}
+            for archivo in archivos_subidos:
+                extension = archivo.name.split('.')[-1].lower()
+                archivos_por_extension[extension] = archivo
+            
+            # Verificar que estén todos los tipos requeridos
+            extensiones_requeridas = {'shp', 'shx', 'dbf', 'prj'}
+            extensiones_subidas = set(archivos_por_extension.keys())
+            
+            if extensiones_requeridas == extensiones_subidas:
+                # Asignar los archivos
+                archivo_shp = archivos_por_extension['shp']
+                archivo_shx = archivos_por_extension['shx']
+                archivo_dbf = archivos_por_extension['dbf']
+                archivo_prj = archivos_por_extension['prj']
+                
+                # Verificar que los archivos tengan el mismo nombre base
+                nombres_base = []
+                for archivo in [archivo_shp, archivo_shx, archivo_dbf, archivo_prj]:
+                    nombre_base = archivo.name.rsplit('.', 1)[0]  # Remover extensión
+                    nombres_base.append(nombre_base)
+                
+                if len(set(nombres_base)) == 1:
+                    st.success("✅ Todos los archivos del shapefile están listos")
+                    archivos_completos = True
+                    
+                    # Mostrar resumen de archivos
+                    st.info("**Archivos cargados:**")
+                    for archivo in [archivo_shp, archivo_shx, archivo_dbf, archivo_prj]:
+                        st.write(f"  - {archivo.name}")
+                else:
+                    st.error("❌ Los archivos deben tener el mismo nombre base")
+                    st.warning("Ejemplo: cobertura.shp, cobertura.shx, cobertura.dbf, cobertura.prj")
+            else:
+                extensiones_faltantes = extensiones_requeridas - extensiones_subidas
+                extensiones_extra = extensiones_subidas - extensiones_requeridas
+                
+                if extensiones_faltantes:
+                    st.error(f"❌ Faltan archivos: {', '.join(extensiones_faltantes)}")
+                if extensiones_extra:
+                    st.warning(f"⚠️ Archivos extra no reconocidos: {', '.join(extensiones_extra)}")
+                
+                st.info("**Archivos requeridos:** .shp, .shx, .dbf, .prj")
     
     # Botón de conversión
     st.markdown("---")
@@ -646,7 +660,7 @@ with col2:
         else:
             st.error("❌ No se pudo procesar la cobertura")
     else:
-        st.info("👆 Configura los parámetros y sube los 4 archivos del shapefile para comenzar")
+        st.info("👆 Configura los parámetros y arrastra los 4 archivos del shapefile para comenzar")
 
 # Información adicional
 st.markdown("---")
