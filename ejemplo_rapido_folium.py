@@ -39,7 +39,7 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
         print(f"  Líneas de conexión creadas: {len(lineas_conexion)}")
         
         # Crear buffer SÚPER ancho alrededor de las líneas de conexión para formar "puentes" sólidos
-        buffer_width = 5  # Buffer EXTREMADAMENTE ancho para crear corredores muy visibles
+        buffer_width = 1  # Buffer EXTREMADAMENTE ancho para crear corredores muy visibles
         puentes = []
         for linea in lineas_conexion:
             puente = linea.buffer(buffer_width)
@@ -76,7 +76,7 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
-    NOMBRE_PARROQUIA = "YANUNCAY"  # Cambiar aquí el nombre de la parroquia
+    NOMBRE_PARROQUIA = "BATAN"  # Cambiar aquí el nombre de la parroquia
     RUTA_PARROQUIAS = "LIMITE_PARROQUIAL_CONALI_CNE_2022/LIMITE_PARROQUIAL_CONALI_CNE_2022.shp"
     RUTA_UMTS = "AZUAY SHAPE/AZUAY_UMTS_JUN2023_v4_region.shp"
     
@@ -275,7 +275,7 @@ def crear_mapa_parroquia_con_cobertura():
                         caminos_conexion = []
                         for linea in lineas_conexion:
                             # Crear un camino EXTREMADAMENTE ancho usando buffer súper grande
-                            camino_ancho = linea.buffer(5)  # Buffer SÚPER ancho para crear corredor muy visible
+                            camino_ancho = linea.buffer(1)  # Buffer SÚPER ancho para crear corredor muy visible
                             caminos_conexion.append(camino_ancho)
                         
                         print(f"  Caminos de conexión creados: {len(caminos_conexion)}")
@@ -300,6 +300,11 @@ def crear_mapa_parroquia_con_cobertura():
                             geometry=[geometria_unificada],
                             crs=parroquia_encontrada.crs
                         )
+                        
+                        # Exportar la geometría unificada a shapefile
+                        nombre_shapefile = f"geometria_unificada_{NOMBRE_PARROQUIA.lower()}.shp"
+                        geometria_unificada_gdf.to_file(nombre_shapefile)
+                        print(f"  ✅ Geometría unificada exportada: {nombre_shapefile}")
                         
                         folium.GeoJson(
                             geometria_unificada_gdf,
