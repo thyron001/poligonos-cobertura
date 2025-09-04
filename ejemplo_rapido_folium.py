@@ -39,7 +39,7 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
         print(f"  Líneas de conexión creadas: {len(lineas_conexion)}")
         
         # Crear buffer SÚPER ancho alrededor de las líneas de conexión para formar "puentes" sólidos
-        buffer_width = 10  # Buffer EXTREMADAMENTE ancho para crear corredores muy visibles
+        buffer_width = 5  # Buffer EXTREMADAMENTE ancho para crear corredores muy visibles
         puentes = []
         for linea in lineas_conexion:
             puente = linea.buffer(buffer_width)
@@ -76,7 +76,7 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
-    NOMBRE_PARROQUIA = "YANUNCAY"  # Cambiar aquí el nombre de la parroquia
+    NOMBRE_PARROQUIA = "BATAN"  # Cambiar aquí el nombre de la parroquia
     RUTA_PARROQUIAS = "LIMITE_PARROQUIAL_CONALI_CNE_2022/LIMITE_PARROQUIAL_CONALI_CNE_2022.shp"
     RUTA_UMTS = "AZUAY SHAPE/AZUAY_UMTS_JUN2023_v4_region.shp"
     
@@ -279,38 +279,24 @@ def crear_mapa_parroquia_con_cobertura():
                         caminos_conexion = []
                         for linea in lineas_conexion:
                             # Crear un camino EXTREMADAMENTE ancho usando buffer súper grande
-                            camino_ancho = linea.buffer(10)  # Buffer SÚPER ancho para crear corredor muy visible
+                            camino_ancho = linea.buffer(5)  # Buffer SÚPER ancho para crear corredor muy visible
                             caminos_conexion.append(camino_ancho)
                         
                         print(f"  Caminos de conexión creados: {len(caminos_conexion)}")
+                        
+                        # Combinar todas las áreas sueltas con los caminos para formar un solo polígono
+                        print(f"  Combinando {len(todas_las_areas)} áreas sueltas con {len(caminos_conexion)} caminos...")
+                        elementos_para_unificar = todas_las_areas + caminos_conexion
+                        
+                        try:
+                            geometria_unificada = unary_union(elementos_para_unificar)
+                            print(f"  ✅ Geometría unificada creada exitosamente")
+                        except Exception as e:
+                            print(f"  ⚠️ Error al crear geometría unificada: {e}")
+                            geometria_unificada = None
                     
-                    # Mostrar los caminos de conexión como corredores anchos
-                    if 'caminos_conexion' in locals() and caminos_conexion:
-                        print(f"Agregando {len(caminos_conexion)} caminos de conexión...")
-                        
-                        for i, camino in enumerate(caminos_conexion):
-                            # Crear un GeoDataFrame con el camino
-                            camino_gdf = gpd.GeoDataFrame(
-                                geometry=[camino],
-                                crs=parroquia_encontrada.crs
-                            )
-                            
-                            folium.GeoJson(
-                                camino_gdf,
-                                name=f'Camino de Conexión {i+1}',
-                                style_function=lambda feature: {
-                                    'fillColor': '#FF6600',     # Tomate para el relleno
-                                    'color': '#800080',         # Morado para el borde
-                                    'weight': 3,                # Borde grueso
-                                    'fillOpacity': 0.8,         # Relleno sólido
-                                    'opacity': 1.0              # Borde completamente opaco
-                                },
-                                tooltip=f'Camino de Conexión {i+1}'
-                            ).add_to(mapa)
-                        
-                        print(f"✅ {len(caminos_conexion)} caminos de conexión agregados")
-                    else:
-                        print(f"⚠️ No se pudieron crear caminos de conexión")
+                    # Los caminos ahora forman parte de la geometría unificada, no se muestran por separado
+                    print(f"✅ Los caminos se han integrado en la geometría unificada")
                     
                     # Agregar la geometría unificada como capa separada
                     if geometria_unificada:
@@ -333,23 +319,7 @@ def crear_mapa_parroquia_con_cobertura():
                         
                         print(f"✅ Geometría unificada creada y agregada al mapa")
                         
-                        # Guardar la geometría unificada como shapefile para exportar
-                        try:
-                            nombre_shapefile = f"interseccion_unificada_{NOMBRE_PARROQUIA.lower().replace(' ', '_')}.shp"
-                            geometria_unificada_gdf.to_file(nombre_shapefile)
-                            print(f"✅ Geometría unificada guardada como: {nombre_shapefile}")
-                            print(f"   Este archivo está listo para usar en otros sistemas GIS")
-                            
-                            # Verificar que el archivo se creó correctamente
-                            import os
-                            if os.path.exists(nombre_shapefile):
-                                file_size = os.path.getsize(nombre_shapefile)
-                                print(f"   Tamaño del archivo: {file_size} bytes")
-                            else:
-                                print(f"   ⚠️ El archivo no se creó correctamente")
-                                
-                        except Exception as e:
-                            print(f"⚠️ Error al guardar shapefile: {e}")
+                        print(f"   Los caminos se han combinado con las áreas para formar un solo polígono")
                     
                 except Exception as e:
                     print(f"⚠️ Error al procesar intersecciones: {e}")
