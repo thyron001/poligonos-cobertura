@@ -19,16 +19,13 @@ import streamlit.components.v1 as components
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Análisis de Cobertura de Telecomunicaciones",
+    page_title="Análisis de Cobertura UMTS",
     page_icon="📡",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Título principal
-st.title("📡 Análisis de Cobertura de Telecomunicaciones")
-st.markdown("---")
-
-# Configuración de las 6 provincias disponibles
+# Configuración de provincias disponibles (solo 6)
 PROVINCIAS_DISPONIBLES = {
     "AZUAY": "azuay.geojson",
     "CAÑAR": "cañar.geojson", 
@@ -66,7 +63,6 @@ def exportar_a_kmz(geodataframe, nombre_archivo):
             kmz_buffer.seek(0)
             return kmz_buffer.getvalue()
     except Exception as e:
-        st.error(f"Error al exportar a KMZ: {e}")
         return None
 
 def crear_geometria_unificada(intersecciones, parroquia_geom):
@@ -75,16 +71,12 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
         return intersecciones[0] if intersecciones else None, []
     
     try:
-        st.info(f"Creando geometría unificada para {len(intersecciones)} intersecciones...")
-        
         # Obtener los centroides de cada intersección
         centroides = []
         for interseccion in intersecciones:
             if not interseccion.is_empty:
                 centroide = interseccion.centroid
                 centroides.append((centroide.x, centroide.y))
-        
-        st.info(f"Centroides calculados: {len(centroides)}")
         
         # Crear líneas de conexión entre centroides
         lineas_conexion = []
@@ -95,8 +87,6 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
                 if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
                     lineas_conexion.append(linea)
         
-        st.info(f"Líneas de conexión creadas: {len(lineas_conexion)}")
-        
         # Crear buffer SÚPER ancho alrededor de las líneas de conexión para formar "puentes" sólidos
         buffer_width = 1  # Buffer EXTREMADAMENTE ancho para crear corredores muy visibles
         puentes = []
@@ -104,47 +94,37 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
             puente = linea.buffer(buffer_width)
             puentes.append(puente)
         
-        st.info(f"Puentes creados con buffer de {buffer_width}")
-        
         # Combinar todas las intersecciones y puentes
         geometrias_combinadas = intersecciones + puentes
         
         # Unir todo en una sola geometría
-        st.info(f"Uniendo {len(geometrias_combinadas)} geometrías...")
         geometria_unificada = unary_union(geometrias_combinadas)
         
         # Verificar que la unión fue exitosa
         if geometria_unificada.is_empty:
-            st.warning("La geometría unificada está vacía, usando solo las intersecciones")
             geometria_unificada = unary_union(intersecciones)
         
-        st.success("Geometría unificada creada exitosamente")
         return geometria_unificada, lineas_conexion
         
     except Exception as e:
-        st.error(f"Error al crear geometría unificada: {e}")
         # Si falla, intentar unir solo las intersecciones
         try:
-            st.info("Intentando unir solo las intersecciones...")
             geometria_simple = unary_union(intersecciones)
             return geometria_simple, []
         except Exception as e2:
-            st.error(f"Error al unir intersecciones: {e2}")
             return None, []
 
 def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provincia, parroquia, operadora, año, tecnologia):
-    """Procesar el archivo de cobertura y generar la geometría unificada - BASADO EN ejemplo_rapido_folium.py"""
-    
-    # Cargar datos de parroquias desde GeoJSON
-    ruta_geojson = obtener_ruta_geojson_provincia(provincia)
-    if not ruta_geojson or not os.path.exists(ruta_geojson):
-        st.error(f"No se encontró el archivo GeoJSON para la provincia: {provincia}")
-        return None, None, None, None
-    
+    """Procesar la cobertura y crear geometría unificada - EXACTO del ejemplo_rapido_folium.py"""
     try:
-        gdf_parroquias = gpd.read_file(ruta_geojson)
+        # Cargar datos de parroquias desde el GeoJSON de la provincia
+        ruta_geojson_provincia = obtener_ruta_geojson_provincia(provincia)
+        if not ruta_geojson_provincia:
+            return None, None, None, None
         
-        # Buscar la parroquia específica - EXACTO del ejemplo_rapido_folium.py
+        gdf_parroquias = gpd.read_file(ruta_geojson_provincia)
+        
+        # Buscar la parroquia específica
         parroquia_encontrada = None
         for campo in gdf_parroquias.columns:
             if gdf_parroquias[campo].dtype == 'object':
@@ -154,35 +134,154 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
                     break
         
         if parroquia_encontrada is None:
-            st.error(f"No se encontró la parroquia '{parroquia}' en la provincia '{provincia}'")
             return None, None, None, None
         
-        # Procesar archivos de cobertura
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # Guardar todos los archivos en el directorio temporal
-            archivos_shapefile = {
-                'shp': archivo_shp,
-                'shx': archivo_shx,
-                'dbf': archivo_dbf,
-                'prj': archivo_prj
-            }
+        # Crear directorio temporal para los archivos shapefile
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Guardar archivos en el directorio temporal
+            shp_path = os.path.join(temp_dir, archivo_shp.name)
+            shx_path = os.path.join(temp_dir, archivo_shx.name)
+            dbf_path = os.path.join(temp_dir, archivo_dbf.name)
+            prj_path = os.path.join(temp_dir, archivo_prj.name)
             
-            rutas_archivos = {}
-            for extension, archivo in archivos_shapefile.items():
-                if archivo:
-                    ruta_archivo = os.path.join(tmp_dir, f"cobertura.{extension}")
-                    with open(ruta_archivo, 'wb') as f:
-                        f.write(archivo.getvalue())
-                    rutas_archivos[extension] = ruta_archivo
+            with open(shp_path, 'wb') as f:
+                f.write(archivo_shp.getbuffer())
+            with open(shx_path, 'wb') as f:
+                f.write(archivo_shx.getbuffer())
+            with open(dbf_path, 'wb') as f:
+                f.write(archivo_dbf.getbuffer())
+            with open(prj_path, 'wb') as f:
+                f.write(archivo_prj.getbuffer())
             
-            # Cargar el shapefile usando el archivo .shp
-            if 'shp' in rutas_archivos:
-                gdf_cobertura = gpd.read_file(rutas_archivos['shp'])
-            else:
-                st.error("No se pudo cargar el archivo .shp")
-                return None, None, None, None
+            # Cargar datos de cobertura
+            gdf_cobertura = gpd.read_file(shp_path)
         
-        # Función para determinar el color según el nivel de cobertura - EXACTO del ejemplo_rapido_folium.py
+        # Lista para almacenar las intersecciones
+        intersecciones = []
+        
+        # Procesar cada nivel de cobertura
+        for idx, row in gdf_cobertura.iterrows():
+            coverage_level = row['Float']
+            
+            # Si es cobertura alta, calcular intersección con la parroquia
+            if coverage_level == -85.0:
+                # Obtener la geometría de la parroquia y la zona de cobertura alta
+                parroquia_geom = parroquia_encontrada.geometry.iloc[0]
+                cobertura_geom = row.geometry
+                
+                # Calcular la intersección
+                try:
+                    interseccion = parroquia_geom.intersection(cobertura_geom)
+                    
+                    if not interseccion.is_empty:
+                        intersecciones.append(interseccion)
+                        
+                except Exception as e:
+                    continue
+        
+        # Si hay intersecciones, procesarlas
+        geometria_unificada = None
+        if intersecciones:
+            try:
+                # Obtener la geometría de la parroquia
+                parroquia_geom = parroquia_encontrada.geometry.iloc[0]
+                
+                # Crear geometría unificada
+                geometria_unificada, caminos_conexion = crear_geometria_unificada(intersecciones, parroquia_geom)
+                
+                # Si no se crearon caminos automáticamente, crear líneas de conexión manuales
+                if not caminos_conexion:
+                    # Obtener todas las áreas sueltas de todas las intersecciones
+                    todas_las_areas = []
+                    for interseccion in intersecciones:
+                        if hasattr(interseccion, 'geoms'):
+                            # Si es MultiPolygon, agregar cada polígono individual
+                            for geom in interseccion.geoms:
+                                todas_las_areas.append(geom)
+                        else:
+                            # Si es Polygon simple, agregarlo directamente
+                            todas_las_areas.append(interseccion)
+                    
+                    # Crear líneas de conexión secuenciales (una con la siguiente)
+                    lineas_conexion = []
+                    
+                    # Ordenar las áreas por su posición (de izquierda a derecha usando el centroide X)
+                    areas_ordenadas = sorted(enumerate(todas_las_areas), key=lambda x: x[1].centroid.x)
+                    indices_ordenados = [idx for idx, _ in areas_ordenadas]
+                    
+                    # Conectar cada área con la siguiente (cadena secuencial)
+                    for i in range(len(indices_ordenados) - 1):
+                        idx_actual = indices_ordenados[i]
+                        idx_siguiente = indices_ordenados[i + 1]
+                        
+                        # Obtener centroides de las dos áreas consecutivas
+                        centroide_actual = todas_las_areas[idx_actual].centroid
+                        centroide_siguiente = todas_las_areas[idx_siguiente].centroid
+                        
+                        # Crear línea entre centroides consecutivos
+                        linea = LineString([(centroide_actual.x, centroide_actual.y), (centroide_siguiente.x, centroide_siguiente.y)])
+                        
+                        # Verificar que la línea esté dentro de la parroquia
+                        if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
+                            lineas_conexion.append(linea)
+                    
+                    # Crear caminos anchos (corredores) en lugar de líneas delgadas
+                    caminos_conexion = []
+                    for linea in lineas_conexion:
+                        # Crear un camino EXTREMADAMENTE ancho usando buffer súper grande
+                        camino_ancho = linea.buffer(1)  # Buffer SÚPER ancho para crear corredor muy visible
+                        caminos_conexion.append(camino_ancho)
+                    
+                    # Combinar todas las áreas sueltas con los caminos para formar un solo polígono
+                    elementos_para_unificar = todas_las_areas + caminos_conexion
+                    
+                    try:
+                        geometria_unificada = unary_union(elementos_para_unificar)
+                    except Exception as e:
+                        geometria_unificada = None
+                
+            except Exception as e:
+                geometria_unificada = None
+        
+        return geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura
+        
+    except Exception as e:
+        return None, None, None, None
+
+def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura):
+    """Crear mapa de Folium - EXACTO del ejemplo_rapido_folium.py"""
+    try:
+        # Calcular el centro de la geometría unificada para centrar el mapa
+        if geometria_unificada and not geometria_unificada.is_empty:
+            bounds = geometria_unificada.bounds
+            center_lat = (bounds[1] + bounds[3]) / 2
+            center_lon = (bounds[0] + bounds[2]) / 2
+        else:
+            # Si no hay geometría unificada, usar el centro de la parroquia
+            bounds = parroquia_encontrada.geometry.iloc[0].bounds
+            center_lat = (bounds[1] + bounds[3]) / 2
+            center_lon = (bounds[0] + bounds[2]) / 2
+        
+        # Crear mapa centrado en la geometría unificada
+        mapa = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=12,
+            tiles='OpenStreetMap'
+        )
+        
+        # Agregar la parroquia específica
+        folium.GeoJson(
+            parroquia_encontrada,
+            name=f'Parroquia {parroquia}',
+            style_function=lambda feature: {
+                'fillColor': 'blue',  # Azul para la parroquia
+                'color': '#000000',      # Borde negro
+                'weight': 2,             # Grosor del borde
+                'fillOpacity': 0.7       # Transparencia
+            }
+        ).add_to(mapa)
+        
+        # Función para determinar el color según el nivel de cobertura
         def get_color_by_coverage(feature):
             coverage_level = feature['properties']['Float']
             if coverage_level == -85.0:  # Nivel alto
@@ -194,7 +293,7 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
             else:
                 return '#808080'  # Gris por defecto
         
-        # Función para obtener el nombre del nivel de cobertura - EXACTO del ejemplo_rapido_folium.py
+        # Función para obtener el nombre del nivel de cobertura
         def get_coverage_name(feature):
             coverage_level = feature['properties']['Float']
             if coverage_level == -85.0:
@@ -206,314 +305,96 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
             else:
                 return f'Cobertura ({coverage_level} dBm)'
         
-        # Lista para almacenar las intersecciones - EXACTO del ejemplo_rapido_folium.py
-        intersecciones = []
-        
-        # Calcular intersecciones solo con cobertura alta - EXACTO del ejemplo_rapido_folium.py
+        # Agregar cada nivel de cobertura UMTS con su color correspondiente
         for idx, row in gdf_cobertura.iterrows():
             coverage_level = row['Float']
             coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
             
-            # Si es cobertura alta, calcular intersección con la parroquia - EXACTO del ejemplo_rapido_folium.py
-            if coverage_level == -85.0:
-                st.info("Calculando intersección con cobertura alta...")
-                
-                # Obtener la geometría de la parroquia y la zona de cobertura alta
-                parroquia_geom = parroquia_encontrada.geometry.iloc[0]
-                cobertura_geom = row.geometry
-                
-                # Calcular la intersección
-                try:
-                    interseccion = parroquia_geom.intersection(cobertura_geom)
-                    
-                    if not interseccion.is_empty:
-                        intersecciones.append(interseccion)
-                        st.success("✅ Intersección encontrada")
-                    else:
-                        st.info("ℹ️ No hay intersección entre la parroquia y la zona de cobertura alta")
-                        
-                except Exception as e:
-                    st.warning(f"⚠️ Error al calcular intersección: {e}")
+            # Crear un GeoDataFrame con solo esta fila
+            single_region = gdf_cobertura.iloc[[idx]]
+            
+            # Agregar la capa de cobertura
+            folium.GeoJson(
+                single_region,
+                name=coverage_name,
+                style_function=lambda feature, level=coverage_level: {
+                    'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
+                    'color': '#000000',      # Borde negro
+                    'weight': 1,             # Grosor del borde
+                    'fillOpacity': 0.6       # Transparencia
+                },
+                tooltip=coverage_name
+            ).add_to(mapa)
         
-        if not intersecciones:
-            st.warning("No se encontraron intersecciones entre la parroquia y la cobertura alta")
-            return None, None, None, None
+        # Mostrar cada intersección por separado (para visualización)
+        for i, interseccion in enumerate(intersecciones):
+            interseccion_gdf = gpd.GeoDataFrame(
+                geometry=[interseccion],
+                crs=parroquia_encontrada.crs
+            )
+            
+            folium.GeoJson(
+                interseccion_gdf,
+                name=f'Intersección {i+1} {parroquia} - Cobertura Alta',
+                style_function=lambda feature: {
+                    'fillColor': '#FF0000',  # Rojo intenso
+                    'color': '#000000',      # Borde negro
+                    'weight': 3,             # Grosor del borde mayor
+                    'fillOpacity': 0.8       # Transparencia menor
+                },
+                tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
+            ).add_to(mapa)
         
-        # Crear geometría unificada - EXACTO del ejemplo_rapido_folium.py
-        geometria_unificada, lineas_conexion = crear_geometria_unificada(intersecciones, parroquia_encontrada.geometry.iloc[0])
+        # Agregar la geometría unificada como capa separada
+        if geometria_unificada:
+            geometria_unificada_gdf = gpd.GeoDataFrame(
+                geometry=[geometria_unificada],
+                crs=parroquia_encontrada.crs
+            )
+            
+            folium.GeoJson(
+                geometria_unificada_gdf,
+                name=f'Geometría Unificada {parroquia} - Cobertura Alta',
+                style_function=lambda feature: {
+                    'fillColor': '#FF6600',  # Naranja para diferenciar
+                    'color': '#800080',      # Borde morado
+                    'weight': 3,             # Borde más grueso
+                    'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
+                },
+                tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
+            ).add_to(mapa)
         
-        # Crear líneas de conexión manuales si no se crearon automáticamente - EXACTO del ejemplo_rapido_folium.py
-        if not lineas_conexion:
-            st.info("Creando líneas de conexión manuales...")
-            
-            # Obtener todas las áreas sueltas de todas las intersecciones
-            todas_las_areas = []
-            for interseccion in intersecciones:
-                if hasattr(interseccion, 'geoms'):
-                    # Si es MultiPolygon, agregar cada polígono individual
-                    for geom in interseccion.geoms:
-                        todas_las_areas.append(geom)
-                else:
-                    # Si es Polygon simple, agregarlo directamente
-                    todas_las_areas.append(interseccion)
-            
-            st.info(f"Total de áreas sueltas encontradas: {len(todas_las_areas)}")
-            
-            # Crear líneas de conexión secuenciales (una con la siguiente)
-            lineas_conexion = []
-            
-            # Ordenar las áreas por su posición (de izquierda a derecha usando el centroide X)
-            areas_ordenadas = sorted(enumerate(todas_las_areas), key=lambda x: x[1].centroid.x)
-            indices_ordenados = [idx for idx, _ in areas_ordenadas]
-            
-            st.info(f"Áreas ordenadas de izquierda a derecha: {[i+1 for i in indices_ordenados]}")
-            
-            # Conectar cada área con la siguiente (cadena secuencial)
-            for i in range(len(indices_ordenados) - 1):
-                idx_actual = indices_ordenados[i]
-                idx_siguiente = indices_ordenados[i + 1]
-                
-                # Obtener centroides de las dos áreas consecutivas
-                centroide_actual = todas_las_areas[idx_actual].centroid
-                centroide_siguiente = todas_las_areas[idx_siguiente].centroid
-                
-                # Crear línea entre centroides consecutivos
-                linea = LineString([(centroide_actual.x, centroide_actual.y), (centroide_siguiente.x, centroide_siguiente.y)])
-                
-                # Verificar que la línea esté dentro de la parroquia
-                if linea.within(parroquia_encontrada.geometry.iloc[0]) or linea.intersects(parroquia_encontrada.geometry.iloc[0]):
-                    lineas_conexion.append(linea)
-                    st.info(f"Conectando Área {idx_actual + 1} con Área {idx_siguiente + 1}")
-            
-            st.info(f"Líneas de conexión secuenciales creadas: {len(lineas_conexion)}")
-            
-            # Crear caminos anchos (corredores) en lugar de líneas delgadas
-            caminos_conexion = []
-            for linea in lineas_conexion:
-                # Crear un camino EXTREMADAMENTE ancho usando buffer súper grande
-                camino_ancho = linea.buffer(1)  # Buffer SÚPER ancho para crear corredor muy visible
-                caminos_conexion.append(camino_ancho)
-            
-            st.info(f"Caminos de conexión creados: {len(caminos_conexion)}")
-            
-            # Combinar todas las áreas sueltas con los caminos para formar un solo polígono
-            st.info(f"Combinando {len(todas_las_areas)} áreas sueltas con {len(caminos_conexion)} caminos...")
-            elementos_para_unificar = todas_las_areas + caminos_conexion
-            
-            try:
-                geometria_unificada = unary_union(elementos_para_unificar)
-                st.success("Geometría unificada creada exitosamente")
-            except Exception as e:
-                st.error(f"Error al crear geometría unificada: {e}")
-                geometria_unificada = None
+        # Agregar controles de capas
+        folium.LayerControl().add_to(mapa)
         
-        if geometria_unificada is None:
-            st.error("No se pudo crear la geometría unificada")
-            return None, None, None, None
+        # Agregar leyenda de colores actualizada
+        legend_html = '''
+        <div style="position: fixed; 
+                    bottom: 50px; left: 50px; width: 280px; height: auto; 
+                    background-color: white; border:2px solid grey; z-index:9999; 
+                    font-size:14px; padding: 10px">
+        <p><b>Leyenda del Mapa</b></p>
+        <p><i class="fa fa-square" style="color:#00FF00"></i> Cobertura Alta (-85 dBm)</p>
+        <p><i class="fa fa-square" style="color:#FFFF99"></i> Cobertura Media (-95 dBm)</p>
+        <p><i class="fa fa-square" style="color:#FFB3B3"></i> Cobertura Baja (-105 dBm)</p>
+        <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
+        <p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>
+        <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>
+        </div>
+        '''
+        mapa.get_root().html.add_child(folium.Element(legend_html))
         
-        return geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura
+        return mapa
         
     except Exception as e:
-        st.error(f"Error al procesar cobertura: {e}")
-        return None, None, None, None
+        return None
 
-def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura):
-    """Crear mapa de Folium con la geometría unificada - EXACTO del ejemplo_rapido_folium.py"""
+# Barra lateral
+with st.sidebar:
+    st.title("📡 Análisis de Cobertura")
     
-    # Crear mapa centrado en Ecuador - EXACTO del ejemplo_rapido_folium.py
-    mapa = folium.Map(
-        location=[-2.0, -78.0],
-        zoom_start=7,
-        tiles='OpenStreetMap'
-    )
-    
-    # Agregar la parroquia específica - EXACTO del ejemplo_rapido_folium.py
-    folium.GeoJson(
-        parroquia_encontrada,
-        name=f'Parroquia {parroquia}',
-        style_function=lambda feature: {
-            'fillColor': 'blue',  # Azul para la parroquia
-            'color': '#000000',      # Borde negro
-            'weight': 2,             # Grosor del borde
-            'fillOpacity': 0.7       # Transparencia
-        }
-    ).add_to(mapa)
-    
-    # Función para determinar el color según el nivel de cobertura - EXACTO del ejemplo_rapido_folium.py
-    def get_color_by_coverage(feature):
-        coverage_level = feature['properties']['Float']
-        if coverage_level == -85.0:  # Nivel alto
-            return '#00FF00'  # Verde intenso
-        elif coverage_level == -95.0:  # Nivel medio
-            return '#FFFF99'  # Amarillo pastel
-        elif coverage_level == -105.0:  # Nivel bajo
-            return '#FFB3B3'  # Rojo pastel
-        else:
-            return '#808080'  # Gris por defecto
-    
-    # Función para obtener el nombre del nivel de cobertura - EXACTO del ejemplo_rapido_folium.py
-    def get_coverage_name(feature):
-        coverage_level = feature['properties']['Float']
-        if coverage_level == -85.0:
-            return 'Cobertura Alta (-85 dBm)'
-        elif coverage_level == -95.0:
-            return 'Cobertura Media (-95 dBm)'
-        elif coverage_level == -105.0:
-            return 'Cobertura Baja (-105 dBm)'
-        else:
-            return f'Cobertura ({coverage_level} dBm)'
-    
-    # Agregar cada nivel de cobertura UMTS con su color correspondiente - EXACTO del ejemplo_rapido_folium.py
-    for idx, row in gdf_cobertura.iterrows():
-        coverage_level = row['Float']
-        coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
-        
-        # Crear un GeoDataFrame con solo esta fila
-        single_region = gdf_cobertura.iloc[[idx]]
-        
-        # Agregar la capa de cobertura
-        folium.GeoJson(
-            single_region,
-            name=coverage_name,
-            style_function=lambda feature, level=coverage_level: {
-                'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
-                'color': '#000000',      # Borde negro
-                'weight': 1,             # Grosor del borde
-                'fillOpacity': 0.6       # Transparencia
-            },
-            tooltip=coverage_name
-        ).add_to(mapa)
-    
-    # Mostrar cada intersección por separado (para visualización) - EXACTO del ejemplo_rapido_folium.py
-    for i, interseccion in enumerate(intersecciones):
-        interseccion_gdf = gpd.GeoDataFrame(
-            geometry=[interseccion],
-            crs=parroquia_encontrada.crs
-        )
-        
-        folium.GeoJson(
-            interseccion_gdf,
-            name=f'Intersección {i+1} {parroquia} - Cobertura Alta',
-            style_function=lambda feature: {
-                'fillColor': '#FF0000',  # Rojo intenso
-                'color': '#000000',      # Borde negro
-                'weight': 3,             # Grosor del borde mayor
-                'fillOpacity': 0.8       # Transparencia menor
-            },
-            tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
-        ).add_to(mapa)
-    
-    # Agregar la geometría unificada como capa separada - EXACTO del ejemplo_rapido_folium.py
-    geometria_unificada_gdf = gpd.GeoDataFrame(
-        geometry=[geometria_unificada],
-        crs=parroquia_encontrada.crs
-    )
-    
-    folium.GeoJson(
-        geometria_unificada_gdf,
-        name=f'Geometría Unificada {parroquia} - Cobertura Alta',
-        style_function=lambda feature: {
-            'fillColor': '#FF6600',  # Naranja para diferenciar
-            'color': '#800080',      # Borde morado
-            'weight': 3,             # Borde más grueso
-            'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
-        },
-        tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
-    ).add_to(mapa)
-    
-    # Agregar controles de capas - EXACTO del ejemplo_rapido_folium.py
-    folium.LayerControl().add_to(mapa)
-    
-    # Agregar leyenda de colores actualizada - EXACTO del ejemplo_rapido_folium.py
-    legend_html = '''
-    <div style="position: fixed; 
-                bottom: 50px; left: 50px; width: 280px; height: auto; 
-                background-color: white; border:2px solid grey; z-index:9999; 
-                font-size:14px; padding: 10px">
-    <p><b>Leyenda del Mapa</b></p>
-    <p><i class="fa fa-square" style="color:#00FF00"></i> Cobertura Alta (-85 dBm)</p>
-    <p><i class="fa fa-square" style="color:#FFFF99"></i> Cobertura Media (-95 dBm)</p>
-    <p><i class="fa fa-square" style="color:#FFB3B3"></i> Cobertura Baja (-105 dBm)</p>
-    <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
-    <p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>
-    <p><i class="fa fa-square" style="color:#FF6600"></i> Caminos de Conexión (Tomate + Borde Morado)</p>
-    <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>
-    </div>
-    '''
-    mapa.get_root().html.add_child(folium.Element(legend_html))
-    
-    return mapa
-
-# Interfaz principal
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.header("📋 Configuración")
-    
-    # Selector de provincia
-    provincia = st.selectbox(
-        "Selecciona la provincia:",
-        options=list(PROVINCIAS_DISPONIBLES.keys()),
-        index=0
-    )
-    
-    # Cargar parroquias de la provincia seleccionada
-    ruta_geojson = obtener_ruta_geojson_provincia(provincia)
-    if ruta_geojson and os.path.exists(ruta_geojson):
-        try:
-            gdf_parroquias = gpd.read_file(ruta_geojson)
-            parroquias_disponibles = sorted(gdf_parroquias['PARROQUIA'].unique().tolist())
-            
-            parroquia = st.selectbox(
-                "Selecciona la parroquia:",
-                options=parroquias_disponibles,
-                index=0
-            )
-        except Exception as e:
-            st.error(f"Error al cargar parroquias de {provincia}: {e}")
-            parroquia = None
-    else:
-        st.error(f"No se encontró el archivo GeoJSON para {provincia}")
-        parroquia = None
-    
-    # Selectores adicionales
-    operadora = st.selectbox(
-        "Selecciona la operadora:",
-        options=OPERADORAS,
-        index=0
-    )
-    
-    año = st.selectbox(
-        "Selecciona el año:",
-        options=AÑOS,
-        index=len(AÑOS)-1  # Último año por defecto
-    )
-    
-    tecnologia = st.selectbox(
-        "Selecciona la tecnología:",
-        options=TECNOLOGIAS,
-        index=0
-    )
-    
-    # Carga de archivos shapefile
-    st.markdown("---")
+    # Drag & Drop más grande (primero)
     st.subheader("📁 Archivos de Cobertura")
-    st.markdown("**Sube los 4 archivos del shapefile (drag & drop múltiple):**")
-    
-    # Información sobre los archivos requeridos
-    with st.expander("ℹ️ Información sobre los archivos shapefile"):
-        st.markdown("""
-        Un shapefile completo requiere 4 archivos:
-        - **.shp** - Archivo principal con la geometría
-        - **.shx** - Archivo de índice
-        - **.dbf** - Archivo de atributos
-        - **.prj** - Archivo de proyección
-        
-        **Puedes arrastrar y soltar los 4 archivos a la vez.**
-        Todos los archivos deben tener el mismo nombre base.
-        """)
-    
-    # Un solo file uploader que acepta múltiples archivos
     archivos_subidos = st.file_uploader(
         "Arrastra y suelta los 4 archivos del shapefile:",
         type=['shp', 'shx', 'dbf', 'prj'],
@@ -557,123 +438,114 @@ with col1:
                     nombres_base.append(nombre_base)
                 
                 if len(set(nombres_base)) == 1:
-                    st.success("✅ Todos los archivos del shapefile están listos")
+                    st.success("✅ Archivos listos")
                     archivos_completos = True
-                    
-                    # Mostrar resumen de archivos
-                    st.info("**Archivos cargados:**")
-                    for archivo in [archivo_shp, archivo_shx, archivo_dbf, archivo_prj]:
-                        st.write(f"  - {archivo.name}")
                 else:
                     st.error("❌ Los archivos deben tener el mismo nombre base")
-                    st.warning("Ejemplo: cobertura.shp, cobertura.shx, cobertura.dbf, cobertura.prj")
             else:
                 extensiones_faltantes = extensiones_requeridas - extensiones_subidas
-                extensiones_extra = extensiones_subidas - extensiones_requeridas
-                
                 if extensiones_faltantes:
                     st.error(f"❌ Faltan archivos: {', '.join(extensiones_faltantes)}")
-                if extensiones_extra:
-                    st.warning(f"⚠️ Archivos extra no reconocidos: {', '.join(extensiones_extra)}")
-                
-                st.info("**Archivos requeridos:** .shp, .shx, .dbf, .prj")
+    
+    st.markdown("---")
+    
+    # Selectores (después del drag & drop)
+    st.subheader("⚙️ Configuración")
+    
+    # Selector de provincia
+    provincia = st.selectbox(
+        "Provincia:",
+        options=list(PROVINCIAS_DISPONIBLES.keys()),
+        index=0
+    )
+    
+    # Cargar parroquias de la provincia seleccionada
+    ruta_geojson = obtener_ruta_geojson_provincia(provincia)
+    parroquias_disponibles = []
+    
+    if ruta_geojson:
+        try:
+            gdf_parroquias = gpd.read_file(ruta_geojson)
+            parroquias_disponibles = sorted(gdf_parroquias['PARROQUIA'].unique().tolist())
+        except Exception as e:
+            st.error(f"Error al cargar parroquias: {e}")
+    
+    # Selector de parroquia
+    parroquia = st.selectbox(
+        "Parroquia:",
+        options=parroquias_disponibles,
+        index=0 if parroquias_disponibles else None,
+        disabled=not parroquias_disponibles
+    )
+    
+    # Selectores adicionales
+    operadora = st.selectbox(
+        "Operadora:",
+        options=OPERADORAS,
+        index=0
+    )
+    
+    año = st.selectbox(
+        "Año:",
+        options=AÑOS,
+        index=3  # 2023 por defecto
+    )
+    
+    tecnologia = st.selectbox(
+        "Tecnología:",
+        options=TECNOLOGIAS,
+        index=0
+    )
     
     # Botón de conversión
     st.markdown("---")
     convertir = st.button("🔄 Convertir", type="primary", use_container_width=True)
 
-with col2:
-    st.header("🗺️ Mapa de Resultados")
-    
-    if convertir and archivos_completos and parroquia:
-        with st.spinner("Procesando cobertura..."):
-            geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura = procesar_cobertura(
-                archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provincia, parroquia, operadora, año, tecnologia
-            )
+# Área principal del mapa
+st.title("📡 Mapa de Resultados")
+
+# Procesar cuando se presiona el botón
+if convertir and archivos_completos and parroquia:
+    with st.spinner("Procesando cobertura..."):
+        # Procesar la cobertura
+        geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura = procesar_cobertura(
+            archivo_shp, archivo_shx, archivo_dbf, archivo_prj, 
+            provincia, parroquia, operadora, año, tecnologia
+        )
         
         if geometria_unificada is not None:
-            # Mostrar información sobre las áreas sueltas - EXACTO del ejemplo_rapido_folium.py
-            if intersecciones:
-                st.markdown("---")
-                st.subheader("📊 Análisis de Áreas Sueltas")
-                
-                # Contar el número total de áreas sueltas
-                total_areas_sueltas = 0
-                for i, interseccion in enumerate(intersecciones):
-                    if hasattr(interseccion, 'geoms'):
-                        # Si es MultiPolygon, contar cada polígono individual
-                        num_areas = len(interseccion.geoms)
-                        total_areas_sueltas += num_areas
-                        st.info(f"Intersección {i+1}: {num_areas} área(s) suelta(s)")
-                    else:
-                        # Si es Polygon simple, es 1 área
-                        total_areas_sueltas += 1
-                        st.info(f"Intersección {i+1}: 1 área suelta")
-                
-                st.success(f"**Total de intersecciones encontradas:** {len(intersecciones)}")
-                st.success(f"**Total de áreas sueltas:** {total_areas_sueltas}")
-                
-                if total_areas_sueltas > 1:
-                    st.info(f"🎯 Las intersecciones generan {total_areas_sueltas} áreas separadas")
-                    st.success("✅ Unificadas en una sola geometría continua")
-                else:
-                    st.info(f"🎯 Las intersecciones forman una sola área continua")
-            
-            # Crear mapa
+            # Crear el mapa
             mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
             
-            # Mostrar mapa
-            st_folium = components.html(
-                mapa._repr_html_(),
-                height=600
-            )
-            
-            # Botón de descarga
-            st.markdown("---")
-            st.subheader("💾 Descargar Resultado")
-            
-            # Crear GeoDataFrame para exportación
-            geometria_unificada_gdf = gpd.GeoDataFrame(
-                geometry=[geometria_unificada],
-                crs=parroquia_encontrada.crs
-            )
-            
-            # Generar nombre del archivo
-            nombre_archivo = f"{parroquia.lower()}_{operadora.lower()}_{año}_{tecnologia}.kmz"
-            
-            # Exportar a KMZ
-            kmz_data = exportar_a_kmz(geometria_unificada_gdf, nombre_archivo)
-            
-            if kmz_data:
-                st.download_button(
-                    label="📥 Descargar KMZ",
-                    data=kmz_data,
-                    file_name=nombre_archivo,
-                    mime="application/zip",
-                    use_container_width=True
+            if mapa:
+                # Mostrar el mapa
+                components.html(mapa._repr_html_(), height=600)
+                
+                # Crear y mostrar botón de descarga
+                nombre_archivo = f"{parroquia.lower()}_{operadora.lower()}_{año}_{tecnologia}.kmz"
+                
+                # Crear GeoDataFrame para exportar
+                geometria_unificada_gdf = gpd.GeoDataFrame(
+                    geometry=[geometria_unificada],
+                    crs=parroquia_encontrada.crs
                 )
                 
-                st.success(f"✅ Geometría unificada generada exitosamente")
-                st.info(f"📄 Archivo: {nombre_archivo}")
+                # Exportar a KMZ
+                kmz_data = exportar_a_kmz(geometria_unificada_gdf, nombre_archivo)
+                
+                if kmz_data:
+                    st.download_button(
+                        label="📥 Descargar KMZ",
+                        data=kmz_data,
+                        file_name=nombre_archivo,
+                        mime="application/vnd.google-earth.kmz",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("❌ Error al generar el archivo KMZ")
             else:
-                st.error("❌ Error al generar el archivo KMZ")
+                st.error("❌ Error al crear el mapa")
         else:
             st.error("❌ No se pudo procesar la cobertura")
-    else:
-        st.info("👆 Configura los parámetros y arrastra los 4 archivos del shapefile para comenzar")
-
-# Información adicional
-st.markdown("---")
-st.markdown("### ℹ️ Información")
-st.markdown("""
-Esta aplicación permite analizar la cobertura de telecomunicaciones en parroquias específicas de Ecuador.
-
-**Proceso:**
-1. Selecciona la provincia y parroquia
-2. Configura la operadora, año y tecnología
-3. Sube los 4 archivos del shapefile (.shp, .shx, .dbf, .prj)
-4. Haz clic en "Convertir" para procesar
-5. Descarga el resultado en formato KMZ
-
-**Provincias disponibles:** Azuay, Cañar, El Oro, Loja, Morona Santiago, Zamora Chinchipe
-""")
+else:
+    st.info("👆 Configura los parámetros y arrastra los 4 archivos del shapefile para comenzar")
