@@ -75,12 +75,16 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
         return intersecciones[0] if intersecciones else None, []
     
     try:
+        st.info(f"Creando geometría unificada para {len(intersecciones)} intersecciones...")
+        
         # Obtener los centroides de cada intersección
         centroides = []
         for interseccion in intersecciones:
             if not interseccion.is_empty:
                 centroide = interseccion.centroid
                 centroides.append((centroide.x, centroide.y))
+        
+        st.info(f"Centroides calculados: {len(centroides)}")
         
         # Crear líneas de conexión entre centroides
         lineas_conexion = []
@@ -91,28 +95,37 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
                 if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
                     lineas_conexion.append(linea)
         
-        # Crear buffer ancho alrededor de las líneas de conexión
-        buffer_width = 1
+        st.info(f"Líneas de conexión creadas: {len(lineas_conexion)}")
+        
+        # Crear buffer SÚPER ancho alrededor de las líneas de conexión para formar "puentes" sólidos
+        buffer_width = 1  # Buffer EXTREMADAMENTE ancho para crear corredores muy visibles
         puentes = []
         for linea in lineas_conexion:
             puente = linea.buffer(buffer_width)
             puentes.append(puente)
         
+        st.info(f"Puentes creados con buffer de {buffer_width}")
+        
         # Combinar todas las intersecciones y puentes
         geometrias_combinadas = intersecciones + puentes
         
         # Unir todo en una sola geometría
+        st.info(f"Uniendo {len(geometrias_combinadas)} geometrías...")
         geometria_unificada = unary_union(geometrias_combinadas)
         
         # Verificar que la unión fue exitosa
         if geometria_unificada.is_empty:
+            st.warning("La geometría unificada está vacía, usando solo las intersecciones")
             geometria_unificada = unary_union(intersecciones)
         
+        st.success("Geometría unificada creada exitosamente")
         return geometria_unificada, lineas_conexion
         
     except Exception as e:
         st.error(f"Error al crear geometría unificada: {e}")
+        # Si falla, intentar unir solo las intersecciones
         try:
+            st.info("Intentando unir solo las intersecciones...")
             geometria_simple = unary_union(intersecciones)
             return geometria_simple, []
         except Exception as e2:
@@ -200,17 +213,82 @@ def procesar_cobertura(archivo_subido, provincia, parroquia, operadora, año, te
         # Crear geometría unificada
         geometria_unificada, lineas_conexion = crear_geometria_unificada(intersecciones, parroquia_geom)
         
+        # Crear líneas de conexión manuales si no se crearon automáticamente
+        if not lineas_conexion:
+            st.info("Creando líneas de conexión manuales...")
+            
+            # Obtener todas las áreas sueltas de todas las intersecciones
+            todas_las_areas = []
+            for interseccion in intersecciones:
+                if hasattr(interseccion, 'geoms'):
+                    # Si es MultiPolygon, agregar cada polígono individual
+                    for geom in interseccion.geoms:
+                        todas_las_areas.append(geom)
+                else:
+                    # Si es Polygon simple, agregarlo directamente
+                    todas_las_areas.append(interseccion)
+            
+            st.info(f"Total de áreas sueltas encontradas: {len(todas_las_areas)}")
+            
+            # Crear líneas de conexión secuenciales (una con la siguiente)
+            lineas_conexion = []
+            
+            # Ordenar las áreas por su posición (de izquierda a derecha usando el centroide X)
+            areas_ordenadas = sorted(enumerate(todas_las_areas), key=lambda x: x[1].centroid.x)
+            indices_ordenados = [idx for idx, _ in areas_ordenadas]
+            
+            st.info(f"Áreas ordenadas de izquierda a derecha: {[i+1 for i in indices_ordenados]}")
+            
+            # Conectar cada área con la siguiente (cadena secuencial)
+            for i in range(len(indices_ordenados) - 1):
+                idx_actual = indices_ordenados[i]
+                idx_siguiente = indices_ordenados[i + 1]
+                
+                # Obtener centroides de las dos áreas consecutivas
+                centroide_actual = todas_las_areas[idx_actual].centroid
+                centroide_siguiente = todas_las_areas[idx_siguiente].centroid
+                
+                # Crear línea entre centroides consecutivos
+                linea = LineString([(centroide_actual.x, centroide_actual.y), (centroide_siguiente.x, centroide_siguiente.y)])
+                
+                # Verificar que la línea esté dentro de la parroquia
+                if linea.within(parroquia_geom) or linea.intersects(parroquia_geom):
+                    lineas_conexion.append(linea)
+                    st.info(f"Conectando Área {idx_actual + 1} con Área {idx_siguiente + 1}")
+            
+            st.info(f"Líneas de conexión secuenciales creadas: {len(lineas_conexion)}")
+            
+            # Crear caminos anchos (corredores) en lugar de líneas delgadas
+            caminos_conexion = []
+            for linea in lineas_conexion:
+                # Crear un camino EXTREMADAMENTE ancho usando buffer súper grande
+                camino_ancho = linea.buffer(1)  # Buffer SÚPER ancho para crear corredor muy visible
+                caminos_conexion.append(camino_ancho)
+            
+            st.info(f"Caminos de conexión creados: {len(caminos_conexion)}")
+            
+            # Combinar todas las áreas sueltas con los caminos para formar un solo polígono
+            st.info(f"Combinando {len(todas_las_areas)} áreas sueltas con {len(caminos_conexion)} caminos...")
+            elementos_para_unificar = todas_las_areas + caminos_conexion
+            
+            try:
+                geometria_unificada = unary_union(elementos_para_unificar)
+                st.success("Geometría unificada creada exitosamente")
+            except Exception as e:
+                st.error(f"Error al crear geometría unificada: {e}")
+                geometria_unificada = None
+        
         if geometria_unificada is None:
             st.error("No se pudo crear la geometría unificada")
-            return None, None
+            return None, None, None
         
-        return geometria_unificada, parroquia_encontrada
+        return geometria_unificada, parroquia_encontrada, intersecciones
         
     except Exception as e:
         st.error(f"Error al procesar cobertura: {e}")
-        return None, None
+        return None, None, None
 
-def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia):
+def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones=None):
     """Crear mapa de Folium con la geometría unificada"""
     
     # Crear mapa centrado en Ecuador
@@ -232,6 +310,26 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         }
     ).add_to(mapa)
     
+    # Mostrar cada intersección por separado (para visualización)
+    if intersecciones:
+        for i, interseccion in enumerate(intersecciones):
+            interseccion_gdf = gpd.GeoDataFrame(
+                geometry=[interseccion],
+                crs=parroquia_encontrada.crs
+            )
+            
+            folium.GeoJson(
+                interseccion_gdf,
+                name=f'Intersección {i+1} {parroquia} - Cobertura Alta',
+                style_function=lambda feature: {
+                    'fillColor': '#FF0000',  # Rojo intenso
+                    'color': '#000000',      # Borde negro
+                    'weight': 3,             # Grosor del borde mayor
+                    'fillOpacity': 0.8       # Transparencia menor
+                },
+                tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
+            ).add_to(mapa)
+    
     # Agregar la geometría unificada
     geometria_unificada_gdf = gpd.GeoDataFrame(
         geometry=[geometria_unificada],
@@ -242,15 +340,30 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         geometria_unificada_gdf,
         name=f'Geometría Unificada {parroquia}',
         style_function=lambda feature: {
-            'fillColor': '#FF6600',
-            'color': '#800080',
-            'weight': 3,
-            'fillOpacity': 0.4
-        }
+            'fillColor': '#FF6600',  # Naranja para diferenciar
+            'color': '#800080',      # Borde morado
+            'weight': 3,             # Borde más grueso
+            'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
+        },
+        tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
     ).add_to(mapa)
     
     # Agregar controles de capas
     folium.LayerControl().add_to(mapa)
+    
+    # Agregar leyenda de colores
+    legend_html = '''
+    <div style="position: fixed; 
+                bottom: 50px; left: 50px; width: 280px; height: auto; 
+                background-color: white; border:2px solid grey; z-index:9999; 
+                font-size:14px; padding: 10px">
+    <p><b>Leyenda del Mapa</b></p>
+    <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
+    <p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>
+    <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>
+    </div>
+    '''
+    mapa.get_root().html.add_child(folium.Element(legend_html))
     
     return mapa
 
@@ -323,13 +436,40 @@ with col2:
     
     if convertir and archivo_subido and parroquia:
         with st.spinner("Procesando cobertura..."):
-            geometria_unificada, parroquia_encontrada = procesar_cobertura(
+            geometria_unificada, parroquia_encontrada, intersecciones = procesar_cobertura(
                 archivo_subido, provincia, parroquia, operadora, año, tecnologia
             )
         
         if geometria_unificada is not None:
+            # Mostrar información sobre las áreas sueltas
+            if intersecciones:
+                st.markdown("---")
+                st.subheader("📊 Análisis de Áreas Sueltas")
+                
+                # Contar el número total de áreas sueltas
+                total_areas_sueltas = 0
+                for i, interseccion in enumerate(intersecciones):
+                    if hasattr(interseccion, 'geoms'):
+                        # Si es MultiPolygon, contar cada polígono individual
+                        num_areas = len(interseccion.geoms)
+                        total_areas_sueltas += num_areas
+                        st.info(f"Intersección {i+1}: {num_areas} área(s) suelta(s)")
+                    else:
+                        # Si es Polygon simple, es 1 área
+                        total_areas_sueltas += 1
+                        st.info(f"Intersección {i+1}: 1 área suelta")
+                
+                st.success(f"**Total de intersecciones encontradas:** {len(intersecciones)}")
+                st.success(f"**Total de áreas sueltas:** {total_areas_sueltas}")
+                
+                if total_areas_sueltas > 1:
+                    st.info(f"🎯 Las intersecciones generan {total_areas_sueltas} áreas separadas")
+                    st.success("✅ Unificadas en una sola geometría continua")
+                else:
+                    st.info(f"🎯 Las intersecciones forman una sola área continua")
+            
             # Crear mapa
-            mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia)
+            mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones)
             
             # Mostrar mapa
             st_folium = components.html(
