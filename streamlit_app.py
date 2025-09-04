@@ -262,9 +262,34 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
         
+        # Debug temporal para ver las coordenadas
+        st.write(f"Debug - Centro del mapa: lat={center_lat}, lon={center_lon}")
+        st.write(f"Debug - Bounds: {bounds}")
+        
         # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
         if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
+            st.write("⚠️ Coordenadas fuera de Ecuador, usando coordenadas por defecto")
             center_lat, center_lon = -2.0, -78.0  # Centro de Ecuador
+        
+        # Crear mapa centrado en la geometría unificada
+        mapa = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=12,
+            tiles='OpenStreetMap'
+        )
+        
+        # Agregar la parroquia específica
+        st.write(f"Debug - Agregando parroquia: {len(parroquia_encontrada)} registros")
+        folium.GeoJson(
+            parroquia_encontrada,
+            name=f'Parroquia {parroquia}',
+            style_function=lambda feature: {
+                'fillColor': 'blue',  # Azul para la parroquia
+                'color': '#000000',      # Borde negro
+                'weight': 2,             # Grosor del borde
+                'fillOpacity': 0.7       # Transparencia
+            }
+        ).add_to(mapa)
         
         # Función para determinar el color según el nivel de cobertura
         def get_color_by_coverage(feature):
@@ -290,7 +315,70 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             else:
                 return f'Cobertura ({coverage_level} dBm)'
         
-        # Leyenda de colores
+        # Agregar cada nivel de cobertura UMTS con su color correspondiente
+        st.write(f"Debug - Agregando {len(gdf_cobertura)} regiones de cobertura")
+        for idx, row in gdf_cobertura.iterrows():
+            coverage_level = row['Float']
+            coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
+            
+            # Crear un GeoDataFrame con solo esta fila
+            single_region = gdf_cobertura.iloc[[idx]]
+            
+            # Agregar la capa de cobertura
+            folium.GeoJson(
+                single_region,
+                name=coverage_name,
+                style_function=lambda feature, level=coverage_level: {
+                    'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
+                    'color': '#000000',      # Borde negro
+                    'weight': 1,             # Grosor del borde
+                    'fillOpacity': 0.6       # Transparencia
+                },
+                tooltip=coverage_name
+            ).add_to(mapa)
+        
+        # Mostrar cada intersección por separado (para visualización)
+        for i, interseccion in enumerate(intersecciones):
+            interseccion_gdf = gpd.GeoDataFrame(
+                geometry=[interseccion],
+                crs=parroquia_encontrada.crs
+            )
+            
+            folium.GeoJson(
+                interseccion_gdf,
+                name=f'Intersección {i+1} {parroquia} - Cobertura Alta',
+                style_function=lambda feature: {
+                    'fillColor': '#FF0000',  # Rojo intenso
+                    'color': '#000000',      # Borde negro
+                    'weight': 3,             # Grosor del borde mayor
+                    'fillOpacity': 0.8       # Transparencia menor
+                },
+                tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
+            ).add_to(mapa)
+        
+        # Agregar la geometría unificada como capa separada
+        if geometria_unificada:
+            geometria_unificada_gdf = gpd.GeoDataFrame(
+                geometry=[geometria_unificada],
+                crs=parroquia_encontrada.crs
+            )
+            
+            folium.GeoJson(
+                geometria_unificada_gdf,
+                name=f'Geometría Unificada {parroquia} - Cobertura Alta',
+                style_function=lambda feature: {
+                    'fillColor': '#FF6600',  # Naranja para diferenciar
+                    'color': '#800080',      # Borde morado
+                    'weight': 3,             # Borde más grueso
+                    'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
+                },
+                tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
+            ).add_to(mapa)
+        
+        # Agregar controles de capas
+        folium.LayerControl().add_to(mapa)
+        
+        # Agregar leyenda de colores actualizada
         legend_html = '''
         <div style="position: fixed; 
                     bottom: 50px; left: 50px; width: 280px; height: auto; 
@@ -305,152 +393,7 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>
         </div>
         '''
-        
-        # CENTRAR EL MAPA EN LA GEOMETRÍA UNIFICADA
-        if geometria_unificada and not geometria_unificada.is_empty:
-            # Obtener el centroide de la geometría unificada
-            centroide = geometria_unificada.centroid
-            center_lat = centroide.y
-            center_lon = centroide.x
-            
-            # Obtener los bounds para calcular el zoom apropiado
-            bounds = geometria_unificada.bounds
-            lat_range = bounds[3] - bounds[1]  # maxy - miny
-            lon_range = bounds[2] - bounds[0]  # maxx - minx
-            max_range = max(lat_range, lon_range)
-            
-            # Calcular zoom basado en el rango de coordenadas
-            if max_range > 1:
-                zoom_level = 8
-            elif max_range > 0.1:
-                zoom_level = 10
-            elif max_range > 0.01:
-                zoom_level = 12
-            else:
-                zoom_level = 14
-            
-            # Recrear el mapa con el centro correcto
-            mapa = folium.Map(
-                location=[center_lat, center_lon],
-                zoom_start=zoom_level,
-                tiles='OpenStreetMap'
-            )
-            
-            # Reagregar todas las capas al nuevo mapa
-            # Parroquia
-            folium.GeoJson(
-                parroquia_encontrada,
-                name=f'Parroquia {parroquia}',
-                style_function=lambda feature: {
-                    'fillColor': 'blue',
-                    'color': '#000000',
-                    'weight': 2,
-                    'fillOpacity': 0.7
-                }
-            ).add_to(mapa)
-            
-            # Cobertura
-            for idx, row in gdf_cobertura.iterrows():
-                coverage_level = row['Float']
-                coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
-                single_region = gdf_cobertura.iloc[[idx]]
-                folium.GeoJson(
-                    single_region,
-                    name=coverage_name,
-                    style_function=lambda feature, level=coverage_level: {
-                        'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
-                        'color': '#000000',
-                        'weight': 1,
-                        'fillOpacity': 0.6
-                    },
-                    tooltip=coverage_name
-                ).add_to(mapa)
-            
-            # Intersecciones
-            for i, interseccion in enumerate(intersecciones):
-                interseccion_gdf = gpd.GeoDataFrame(
-                    geometry=[interseccion],
-                    crs=parroquia_encontrada.crs
-                )
-                folium.GeoJson(
-                    interseccion_gdf,
-                    name=f'Intersección {i+1} {parroquia} - Cobertura Alta',
-                    style_function=lambda feature: {
-                        'fillColor': '#FF0000',
-                        'color': '#000000',
-                        'weight': 3,
-                        'fillOpacity': 0.8
-                    },
-                    tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
-                ).add_to(mapa)
-            
-            # Geometría unificada
-            geometria_unificada_gdf = gpd.GeoDataFrame(
-                geometry=[geometria_unificada],
-                crs=parroquia_encontrada.crs
-            )
-            folium.GeoJson(
-                geometria_unificada_gdf,
-                name=f'Geometría Unificada {parroquia} - Cobertura Alta',
-                style_function=lambda feature: {
-                    'fillColor': '#FF6600',
-                    'color': '#800080',
-                    'weight': 3,
-                    'fillOpacity': 0.4
-                },
-                tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
-            ).add_to(mapa)
-            
-            # Controles y leyenda
-            folium.LayerControl().add_to(mapa)
-            mapa.get_root().html.add_child(folium.Element(legend_html))
-            
-        else:
-            # Si no hay geometría unificada, centrar en la parroquia
-            centroide = parroquia_encontrada.geometry.iloc[0].centroid
-            center_lat = centroide.y
-            center_lon = centroide.x
-            
-            # Recrear el mapa centrado en la parroquia
-            mapa = folium.Map(
-                location=[center_lat, center_lon],
-                zoom_start=12,
-                tiles='OpenStreetMap'
-            )
-            
-            # Reagregar todas las capas al nuevo mapa
-            # Parroquia
-            folium.GeoJson(
-                parroquia_encontrada,
-                name=f'Parroquia {parroquia}',
-                style_function=lambda feature: {
-                    'fillColor': 'blue',
-                    'color': '#000000',
-                    'weight': 2,
-                    'fillOpacity': 0.7
-                }
-            ).add_to(mapa)
-            
-            # Cobertura
-            for idx, row in gdf_cobertura.iterrows():
-                coverage_level = row['Float']
-                coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
-                single_region = gdf_cobertura.iloc[[idx]]
-                folium.GeoJson(
-                    single_region,
-                    name=coverage_name,
-                    style_function=lambda feature, level=coverage_level: {
-                        'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
-                        'color': '#000000',
-                        'weight': 1,
-                        'fillOpacity': 0.6
-                    },
-                    tooltip=coverage_name
-                ).add_to(mapa)
-            
-            # Controles y leyenda
-            folium.LayerControl().add_to(mapa)
-            mapa.get_root().html.add_child(folium.Element(legend_html))
+        mapa.get_root().html.add_child(folium.Element(legend_html))
         
         return mapa
         
@@ -581,9 +524,17 @@ if convertir and archivos_completos and parroquia:
             provincia, parroquia, operadora, año, tecnologia
         )
         
+        # Debug temporal
+        st.write(f"Debug - geometria_unificada: {geometria_unificada is not None}")
+        st.write(f"Debug - parroquia_encontrada: {parroquia_encontrada is not None}")
+        st.write(f"Debug - intersecciones: {len(intersecciones) if intersecciones else 0}")
+        st.write(f"Debug - gdf_cobertura: {gdf_cobertura is not None}")
+        
         if geometria_unificada is not None:
             # Crear el mapa
             mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
+            
+            st.write(f"Debug - mapa creado: {mapa is not None}")
             
             if mapa:
                 # Mostrar el mapa
