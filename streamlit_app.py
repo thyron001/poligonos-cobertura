@@ -513,9 +513,17 @@ if convertir and archivos_completos and parroquia:
             provincia, parroquia, operadora, año, tecnologia
         )
         
+        # Debug temporal
+        st.write(f"Debug - geometria_unificada: {geometria_unificada is not None}")
+        st.write(f"Debug - parroquia_encontrada: {parroquia_encontrada is not None}")
+        st.write(f"Debug - intersecciones: {len(intersecciones) if intersecciones else 0}")
+        st.write(f"Debug - gdf_cobertura: {gdf_cobertura is not None}")
+        
         if geometria_unificada is not None:
             # Crear el mapa
             mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
+            
+            st.write(f"Debug - mapa creado: {mapa is not None}")
             
             if mapa:
                 # Mostrar el mapa
@@ -548,4 +556,9 @@ if convertir and archivos_completos and parroquia:
         else:
             st.error("❌ No se pudo procesar la cobertura")
 else:
-    st.info("👆 Configura los parámetros y arrastra los 4 archivos del shapefile para comenzar")
+    if not archivos_completos:
+        st.info("👆 Arrastra los 4 archivos del shapefile")
+    elif not parroquia:
+        st.info("👆 Selecciona una parroquia")
+    else:
+        st.info("👆 Presiona el botón Convertir")
