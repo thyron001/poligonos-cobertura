@@ -262,6 +262,15 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
         
+        # Debug temporal para ver las coordenadas
+        st.write(f"Debug - Centro del mapa: lat={center_lat}, lon={center_lon}")
+        st.write(f"Debug - Bounds: {bounds}")
+        
+        # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
+        if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
+            st.write("⚠️ Coordenadas fuera de Ecuador, usando coordenadas por defecto")
+            center_lat, center_lon = -2.0, -78.0  # Centro de Ecuador
+        
         # Crear mapa centrado en la geometría unificada
         mapa = folium.Map(
             location=[center_lat, center_lon],
@@ -270,6 +279,7 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         )
         
         # Agregar la parroquia específica
+        st.write(f"Debug - Agregando parroquia: {len(parroquia_encontrada)} registros")
         folium.GeoJson(
             parroquia_encontrada,
             name=f'Parroquia {parroquia}',
@@ -306,6 +316,7 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 return f'Cobertura ({coverage_level} dBm)'
         
         # Agregar cada nivel de cobertura UMTS con su color correspondiente
+        st.write(f"Debug - Agregando {len(gdf_cobertura)} regiones de cobertura")
         for idx, row in gdf_cobertura.iterrows():
             coverage_level = row['Float']
             coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
