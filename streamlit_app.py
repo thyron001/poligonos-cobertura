@@ -37,7 +37,7 @@ PROVINCIAS_DISPONIBLES = {
 
 OPERADORAS = ["MOVISTAR", "CLARO", "CNT"]
 TECNOLOGIAS = ["2G", "3G", "4G"]
-AÑOS = ["2020", "2021", "2022", "2023", "2024"]
+AÑOS = ["2020", "2021", "2022", "2023", "2024", "2025"]
 
 def obtener_ruta_geojson_provincia(nombre_provincia):
     """Obtener la ruta del archivo GeoJSON de la provincia especificada"""
@@ -253,28 +253,47 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
     try:
         # Calcular el centro de la geometría unificada para centrar el mapa
         if geometria_unificada and not geometria_unificada.is_empty:
+            # Usar la geometría unificada para centrar
             bounds = geometria_unificada.bounds
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
+            st.write(f"Debug - Centrado en geometría unificada: lat={center_lat}, lon={center_lon}")
         else:
             # Si no hay geometría unificada, usar el centro de la parroquia
             bounds = parroquia_encontrada.geometry.iloc[0].bounds
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
-        
-        # Debug temporal para ver las coordenadas
-        st.write(f"Debug - Centro del mapa: lat={center_lat}, lon={center_lon}")
-        st.write(f"Debug - Bounds: {bounds}")
+            st.write(f"Debug - Centrado en parroquia: lat={center_lat}, lon={center_lon}")
         
         # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
         if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
             st.write("⚠️ Coordenadas fuera de Ecuador, usando coordenadas por defecto")
             center_lat, center_lon = -2.0, -78.0  # Centro de Ecuador
         
+        # Calcular zoom apropiado basado en el tamaño de la geometría
+        if geometria_unificada and not geometria_unificada.is_empty:
+            # Calcular el tamaño de la geometría unificada
+            bounds = geometria_unificada.bounds
+            width = bounds[2] - bounds[0]  # longitud
+            height = bounds[3] - bounds[1]  # latitud
+            
+            # Ajustar zoom basado en el tamaño
+            if width < 0.01 or height < 0.01:
+                zoom_level = 15  # Zoom alto para áreas pequeñas
+            elif width < 0.05 or height < 0.05:
+                zoom_level = 13  # Zoom medio-alto
+            else:
+                zoom_level = 11  # Zoom medio
+        else:
+            zoom_level = 12  # Zoom por defecto
+        
+        # Debug del zoom
+        st.write(f"Debug - Nivel de zoom: {zoom_level}")
+        
         # Crear mapa centrado en la geometría unificada
         mapa = folium.Map(
             location=[center_lat, center_lon],
-            zoom_start=12,
+            zoom_start=zoom_level,
             tiles='OpenStreetMap'
         )
         
