@@ -37,7 +37,7 @@ PROVINCIAS_DISPONIBLES = {
 
 OPERADORAS = ["MOVISTAR", "CLARO", "CNT"]
 TECNOLOGIAS = ["2G", "3G", "4G"]
-AÑOS = ["2020", "2021", "2022", "2023", "2024", "2025"]
+AÑOS = ["2020", "2021", "2022", "2023", "2024"]
 
 def obtener_ruta_geojson_provincia(nombre_provincia):
     """Obtener la ruta del archivo GeoJSON de la provincia especificada"""
@@ -251,10 +251,30 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
 def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura):
     """Crear mapa de Folium - EXACTO del ejemplo_rapido_folium.py"""
     try:
-        # Crear mapa inicial (se centrará después)
+        # Calcular el centro de la geometría unificada para centrar el mapa
+        if geometria_unificada and not geometria_unificada.is_empty:
+            bounds = geometria_unificada.bounds
+            center_lat = (bounds[1] + bounds[3]) / 2
+            center_lon = (bounds[0] + bounds[2]) / 2
+        else:
+            # Si no hay geometría unificada, usar el centro de la parroquia
+            bounds = parroquia_encontrada.geometry.iloc[0].bounds
+            center_lat = (bounds[1] + bounds[3]) / 2
+            center_lon = (bounds[0] + bounds[2]) / 2
+        
+        # Debug temporal para ver las coordenadas
+        st.write(f"Debug - Centro del mapa: lat={center_lat}, lon={center_lon}")
+        st.write(f"Debug - Bounds: {bounds}")
+        
+        # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
+        if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
+            st.write("⚠️ Coordenadas fuera de Ecuador, usando coordenadas por defecto")
+            center_lat, center_lon = -2.0, -78.0  # Centro de Ecuador
+        
+        # Crear mapa centrado en la geometría unificada
         mapa = folium.Map(
-            location=[-2.0, -78.0],  # Centro de Ecuador como fallback
-            zoom_start=10,
+            location=[center_lat, center_lon],
+            zoom_start=12,
             tiles='OpenStreetMap'
         )
         
@@ -381,12 +401,12 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             bounds = geometria_unificada.bounds
             # fit_bounds espera [[lat_min, lon_min], [lat_max, lon_max]]
             mapa.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-            st.write(f"Debug - Mapa centrado en geometría unificada: bounds={bounds}")
+            st.write(f"✅ Mapa centrado en geometría unificada")
         else:
             # Si no hay geometría unificada, centrar en la parroquia
             bounds = parroquia_encontrada.geometry.iloc[0].bounds
             mapa.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-            st.write(f"Debug - Mapa centrado en parroquia: bounds={bounds}")
+            st.write(f"✅ Mapa centrado en parroquia")
         
         return mapa
         
