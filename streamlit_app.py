@@ -297,16 +297,10 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
 def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura):
     """Crear mapa de Folium - EXACTO del ejemplo_rapido_folium.py"""
     try:
-        # Calcular el centro de la geometría unificada para centrar el mapa
-        if geometria_unificada and not geometria_unificada.is_empty:
-            bounds = geometria_unificada.bounds
-            center_lat = (bounds[1] + bounds[3]) / 2
-            center_lon = (bounds[0] + bounds[2]) / 2
-        else:
-            # Si no hay geometría unificada, usar el centro de la parroquia
-            bounds = parroquia_encontrada.geometry.iloc[0].bounds
-            center_lat = (bounds[1] + bounds[3]) / 2
-            center_lon = (bounds[0] + bounds[2]) / 2
+        # Calcular el centro de la parroquia para centrar el mapa
+        bounds = parroquia_encontrada.geometry.iloc[0].bounds
+        center_lat = (bounds[1] + bounds[3]) / 2
+        center_lon = (bounds[0] + bounds[2]) / 2
         
         # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
         if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
