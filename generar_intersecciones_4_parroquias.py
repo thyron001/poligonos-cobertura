@@ -108,16 +108,24 @@ def procesar_parroquia(nombre_parroquia, gdf_parroquias, gdf_umts, mapa):
     print(f"PROCESANDO: {nombre_parroquia}")
     print(f"{'='*60}")
     
-    # Buscar la parroquia específica
+    # Buscar la parroquia específica por nombre exacto
     parroquia_encontrada = None
     
-    for campo in gdf_parroquias.columns:
-        if gdf_parroquias[campo].dtype == 'object':
-            coincidencias = gdf_parroquias[gdf_parroquias[campo].str.upper().str.contains(nombre_parroquia.upper(), na=False)]
-            if len(coincidencias) > 0:
-                parroquia_encontrada = coincidencias
-                print(f"Encontrada en campo '{campo}': {coincidencias[campo].iloc[0]}")
-                break
+    # Primero buscar por nombre exacto en el campo PARROQUIA
+    coincidencias_exactas = gdf_parroquias[gdf_parroquias['PARROQUIA'].str.upper() == nombre_parroquia.upper()]
+    
+    if len(coincidencias_exactas) > 0:
+        parroquia_encontrada = coincidencias_exactas
+        print(f"Encontrada exacta en campo 'PARROQUIA': {coincidencias_exactas['PARROQUIA'].iloc[0]}")
+    else:
+        # Si no se encuentra exacta, buscar por coincidencia parcial
+        for campo in gdf_parroquias.columns:
+            if gdf_parroquias[campo].dtype == 'object':
+                coincidencias = gdf_parroquias[gdf_parroquias[campo].str.upper().str.contains(nombre_parroquia.upper(), na=False)]
+                if len(coincidencias) > 0:
+                    parroquia_encontrada = coincidencias
+                    print(f"Encontrada en campo '{campo}': {coincidencias[campo].iloc[0]}")
+                    break
     
     if parroquia_encontrada is None:
         print(f"❌ No se encontró la parroquia: {nombre_parroquia}")

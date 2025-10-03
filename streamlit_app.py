@@ -124,14 +124,22 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
         
         gdf_parroquias = gpd.read_file(ruta_geojson_provincia)
         
-        # Buscar la parroquia específica
+        # Buscar la parroquia específica por nombre exacto
         parroquia_encontrada = None
-        for campo in gdf_parroquias.columns:
-            if gdf_parroquias[campo].dtype == 'object':
-                coincidencias = gdf_parroquias[gdf_parroquias[campo].str.upper().str.contains(parroquia.upper(), na=False)]
-                if len(coincidencias) > 0:
-                    parroquia_encontrada = coincidencias
-                    break
+        
+        # Primero buscar por nombre exacto en el campo PARROQUIA
+        coincidencias_exactas = gdf_parroquias[gdf_parroquias['PARROQUIA'].str.upper() == parroquia.upper()]
+        
+        if len(coincidencias_exactas) > 0:
+            parroquia_encontrada = coincidencias_exactas
+        else:
+            # Si no se encuentra exacta, buscar por coincidencia parcial
+            for campo in gdf_parroquias.columns:
+                if gdf_parroquias[campo].dtype == 'object':
+                    coincidencias = gdf_parroquias[gdf_parroquias[campo].str.upper().str.contains(parroquia.upper(), na=False)]
+                    if len(coincidencias) > 0:
+                        parroquia_encontrada = coincidencias
+                        break
         
         if parroquia_encontrada is None:
             return None, None, None, None

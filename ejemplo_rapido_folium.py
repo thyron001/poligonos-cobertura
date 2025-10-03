@@ -129,9 +129,9 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
-    NOMBRE_PARROQUIA = "GUACHAPALA"  # Cambiar aquí el nombre de la parroquia
-    NOMBRE_PROVINCIA = "AZUAY"  # Cambiar aquí el nombre de la provincia
-    RUTA_UMTS = "AZUAY SHAPE/1. Azuay Cobertura GSM Semestre I 2025.shp"
+    NOMBRE_PARROQUIA = "GUALAQUIZA"  # Cambiar aquí el nombre de la parroquia
+    NOMBRE_PROVINCIA = "MORONA SANTIAGO"  # Cambiar aquí el nombre de la provincia
+    RUTA_UMTS = "MORONA/15. Morona Santiago Cobertura GSM Semestre I 2025.shp"
     
     print(f"Buscando parroquia: {NOMBRE_PARROQUIA} en provincia: {NOMBRE_PROVINCIA}")
     
@@ -148,21 +148,31 @@ def crear_mapa_parroquia_con_cobertura():
         gdf_parroquias = gpd.read_file(ruta_geojson_provincia)
         print(f"Datos de parroquias cargados. Total de registros: {len(gdf_parroquias)}")
         
-        # Buscar la parroquia específica
+        # Buscar la parroquia específica por nombre exacto
         parroquia_encontrada = None
         
-        for campo in gdf_parroquias.columns:
-            if gdf_parroquias[campo].dtype == 'object':
-                print(f"Buscando en campo: {campo}")
-                coincidencias = gdf_parroquias[gdf_parroquias[campo].str.upper().str.contains(NOMBRE_PARROQUIA.upper(), na=False)]
-                if len(coincidencias) > 0:
-                    parroquia_encontrada = coincidencias
-                    print(f"Encontrada! {len(coincidencias)} coincidencias en '{campo}'")
-                    break
+        # Primero buscar por nombre exacto en el campo PARROQUIA
+        print(f"Buscando parroquia exacta: {NOMBRE_PARROQUIA}")
+        coincidencias_exactas = gdf_parroquias[gdf_parroquias['PARROQUIA'].str.upper() == NOMBRE_PARROQUIA.upper()]
+        
+        if len(coincidencias_exactas) > 0:
+            parroquia_encontrada = coincidencias_exactas
+            print(f"Encontrada! {len(coincidencias_exactas)} coincidencia(s) exacta(s) en 'PARROQUIA'")
+        else:
+            # Si no se encuentra exacta, buscar por coincidencia parcial
+            print(f"No se encontró exacta, buscando por coincidencia parcial...")
+            for campo in gdf_parroquias.columns:
+                if gdf_parroquias[campo].dtype == 'object':
+                    print(f"Buscando en campo: {campo}")
+                    coincidencias = gdf_parroquias[gdf_parroquias[campo].str.upper().str.contains(NOMBRE_PARROQUIA.upper(), na=False)]
+                    if len(coincidencias) > 0:
+                        parroquia_encontrada = coincidencias
+                        print(f"Encontrada! {len(coincidencias)} coincidencias en '{campo}'")
+                        break
         
         if parroquia_encontrada is not None:
             # Cargar datos de cobertura UMTS
-            print("Cargando cobertura UMTS de Azuay...")
+            print("Cargando cobertura UMTS de Morona Santiago...")
             gdf_umts = gpd.read_file(RUTA_UMTS)
             print(f"Datos de cobertura UMTS cargados. Total de registros: {len(gdf_umts)}")
             
@@ -235,7 +245,7 @@ def crear_mapa_parroquia_con_cobertura():
                     tooltip=coverage_name
                 ).add_to(mapa)
                 
-                # Si es cobertura alta, calcular intersección con la parroquia
+                # Solo calcular intersección con cobertura alta (-85 dBm)
                 if coverage_level == -85:
                     print(f"Calculando intersección con cobertura alta...")
                     
@@ -249,7 +259,7 @@ def crear_mapa_parroquia_con_cobertura():
                         
                         if not interseccion.is_empty:
                             intersecciones.append(interseccion)
-                            print(f"Interseccion encontrada")
+                            print(f"Interseccion encontrada con cobertura alta")
                         else:
                             print(f"No hay interseccion entre {NOMBRE_PARROQUIA} y la zona de cobertura alta")
                             
