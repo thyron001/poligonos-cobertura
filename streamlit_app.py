@@ -37,7 +37,7 @@ PROVINCIAS_DISPONIBLES = {
 
 OPERADORAS = ["MOVISTAR", "CLARO", "CNT"]
 TECNOLOGIAS = ["2G", "3G", "4G"]
-AÑOS = ["2020", "2021", "2022", "2023", "2024"]
+AÑOS = ["2020", "2021", "2022", "2023", "2024", "2025"]
 
 def obtener_ruta_geojson_provincia(nombre_provincia):
     """Obtener la ruta del archivo GeoJSON de la provincia especificada"""
@@ -521,7 +521,7 @@ with st.sidebar:
     año = st.selectbox(
         "Año:",
         options=AÑOS,
-        index=3  # 2023 por defecto
+        index=5  # 2025 por defecto
     )
     
     tecnologia = st.selectbox(
