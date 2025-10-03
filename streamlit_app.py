@@ -37,6 +37,9 @@ st.markdown("""
     .stApp {
         margin-top: -80px;
     }
+    .stSidebar > div:first-child {
+        padding-top: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -458,61 +461,7 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
 with st.sidebar:
     st.title("📡 Análisis de Cobertura")
     
-    # Configuración (primero)
-    st.subheader("⚙️ Configuración")
-    
-    # Selector de provincia
-    provincia = st.selectbox(
-        "Provincia:",
-        options=list(PROVINCIAS_DISPONIBLES.keys()),
-        index=0
-    )
-    
-    # Cargar parroquias de la provincia seleccionada
-    ruta_geojson = obtener_ruta_geojson_provincia(provincia)
-    parroquias_disponibles = []
-    
-    if ruta_geojson:
-        try:
-            gdf_parroquias = gpd.read_file(ruta_geojson)
-            parroquias_disponibles = sorted(gdf_parroquias['PARROQUIA'].unique().tolist())
-        except Exception as e:
-            st.error(f"Error al cargar parroquias: {e}")
-    
-    # Selector de parroquia
-    parroquia = st.selectbox(
-        "Parroquia:",
-        options=parroquias_disponibles,
-        index=0 if parroquias_disponibles else None,
-        disabled=not parroquias_disponibles
-    )
-    
-    # Selectores adicionales
-    operadora = st.selectbox(
-        "Operadora:",
-        options=OPERADORAS,
-        index=0
-    )
-    
-    año = st.selectbox(
-        "Año:",
-        options=AÑOS,
-        index=5  # 2025 por defecto
-    )
-    
-    tecnologia = st.selectbox(
-        "Tecnología:",
-        options=TECNOLOGIAS,
-        index=0
-    )
-    
-    # Botón de conversión (segundo)
-    st.markdown("---")
-    convertir = st.button("🔄 Convertir", type="primary", use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Archivos de cobertura (tercero)
+    # Drag & Drop más grande (primero)
     st.subheader("📁 Archivos de Cobertura")
     archivos_subidos = st.file_uploader(
         "Arrastra y suelta los 4 archivos del shapefile:",
@@ -565,6 +514,60 @@ with st.sidebar:
                 extensiones_faltantes = extensiones_requeridas - extensiones_subidas
                 if extensiones_faltantes:
                     st.error(f"❌ Faltan archivos: {', '.join(extensiones_faltantes)}")
+    
+    st.markdown("---")
+    
+    # Selectores (después del drag & drop)
+    st.subheader("⚙️ Configuración")
+    
+    # Selector de provincia
+    provincia = st.selectbox(
+        "Provincia:",
+        options=list(PROVINCIAS_DISPONIBLES.keys()),
+        index=0
+    )
+    
+    # Cargar parroquias de la provincia seleccionada
+    ruta_geojson = obtener_ruta_geojson_provincia(provincia)
+    parroquias_disponibles = []
+    
+    if ruta_geojson:
+        try:
+            gdf_parroquias = gpd.read_file(ruta_geojson)
+            parroquias_disponibles = sorted(gdf_parroquias['PARROQUIA'].unique().tolist())
+        except Exception as e:
+            st.error(f"Error al cargar parroquias: {e}")
+    
+    # Selector de parroquia
+    parroquia = st.selectbox(
+        "Parroquia:",
+        options=parroquias_disponibles,
+        index=0 if parroquias_disponibles else None,
+        disabled=not parroquias_disponibles
+    )
+    
+    # Selectores adicionales
+    operadora = st.selectbox(
+        "Operadora:",
+        options=OPERADORAS,
+        index=0
+    )
+    
+    año = st.selectbox(
+        "Año:",
+        options=AÑOS,
+        index=5  # 2025 por defecto
+    )
+    
+    tecnologia = st.selectbox(
+        "Tecnología:",
+        options=TECNOLOGIAS,
+        index=0
+    )
+    
+    # Botón de conversión
+    st.markdown("---")
+    convertir = st.button("🔄 Convertir", type="primary", use_container_width=True)
 
 # Área principal del mapa
 st.title("📡 Mapa de Resultados")
