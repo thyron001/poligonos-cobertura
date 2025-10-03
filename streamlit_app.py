@@ -196,9 +196,14 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
             st.error("❌ No se encontró columna de cobertura en el archivo SHP")
             return None, None, None, None
         
-        st.write(f"✅ Usando columna de cobertura: {columna_cobertura}")
-        st.write(f"📊 Columnas disponibles en el SHP: {list(gdf_cobertura.columns)}")
-        st.write(f"📊 Niveles de cobertura encontrados: {sorted(gdf_cobertura[columna_cobertura].unique())}")
+        # Crear contenedores temporales para los mensajes de debug
+        debug_container1 = st.empty()
+        debug_container2 = st.empty()
+        debug_container3 = st.empty()
+        
+        debug_container1.write(f"✅ Usando columna de cobertura: {columna_cobertura}")
+        debug_container2.write(f"📊 Columnas disponibles en el SHP: {list(gdf_cobertura.columns)}")
+        debug_container3.write(f"📊 Niveles de cobertura encontrados: {sorted(gdf_cobertura[columna_cobertura].unique())}")
         
         # Procesar cada nivel de cobertura
         for idx, row in gdf_cobertura.iterrows():
@@ -284,10 +289,10 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
             except Exception as e:
                 geometria_unificada = None
         
-        return geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura
+        return geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura, debug_container1, debug_container2, debug_container3
         
     except Exception as e:
-        return None, None, None, None
+        return None, None, None, None, None, None, None
 
 def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura):
     """Crear mapa de Folium - EXACTO del ejemplo_rapido_folium.py"""
@@ -569,14 +574,24 @@ st.title("📡 Mapa de Resultados")
 if convertir and archivos_completos and parroquia:
     with st.spinner("Procesando cobertura..."):
         # Procesar la cobertura
-        geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura = procesar_cobertura(
+        geometria_unificada, parroquia_encontrada, intersecciones, gdf_cobertura, debug_container1, debug_container2, debug_container3 = procesar_cobertura(
             archivo_shp, archivo_shx, archivo_dbf, archivo_prj, 
             provincia, parroquia, operadora, año, tecnologia
         )
         
         # Crear el mapa siempre, independientemente de si hay intersecciones
-        st.write("Generando mapa...")
+        mapa_container = st.empty()
+        mapa_container.write("Generando mapa...")
         mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
+        
+        # Limpiar los mensajes de debug una vez que el mapa esté generado
+        if debug_container1:
+            debug_container1.empty()
+        if debug_container2:
+            debug_container2.empty()
+        if debug_container3:
+            debug_container3.empty()
+        mapa_container.empty()
         
         if mapa:
             # Mostrar el mapa
