@@ -266,20 +266,32 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
 def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura):
     """Crear mapa de Folium - EXACTO del ejemplo_rapido_folium.py"""
     try:
+        # Convertir a WGS84 si es necesario para el centrado del mapa
+        if parroquia_encontrada.crs != 'EPSG:4326':
+            parroquia_wgs84 = parroquia_encontrada.to_crs('EPSG:4326')
+            if geometria_unificada:
+                geometria_wgs84 = gpd.GeoDataFrame(geometry=[geometria_unificada], crs=parroquia_encontrada.crs).to_crs('EPSG:4326')
+            else:
+                geometria_wgs84 = None
+        else:
+            parroquia_wgs84 = parroquia_encontrada
+            geometria_wgs84 = gpd.GeoDataFrame(geometry=[geometria_unificada], crs=parroquia_encontrada.crs) if geometria_unificada else None
+        
         # Calcular el centro de la geometría unificada para centrar el mapa
-        if geometria_unificada and not geometria_unificada.is_empty:
-            bounds = geometria_unificada.bounds
+        if geometria_wgs84 and not geometria_wgs84.geometry.iloc[0].is_empty:
+            bounds = geometria_wgs84.geometry.iloc[0].bounds
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
         else:
             # Si no hay geometría unificada, usar el centro de la parroquia
-            bounds = parroquia_encontrada.geometry.iloc[0].bounds
+            bounds = parroquia_wgs84.geometry.iloc[0].bounds
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
         
         # Debug temporal para ver las coordenadas
         st.write(f"Debug - Centro del mapa: lat={center_lat}, lon={center_lon}")
         st.write(f"Debug - Bounds: {bounds}")
+        st.write(f"Debug - CRS original: {parroquia_encontrada.crs}")
         
         # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
         if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
@@ -293,10 +305,16 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             tiles='OpenStreetMap'
         )
         
+        # Convertir datos de cobertura a WGS84 si es necesario
+        if gdf_cobertura.crs != 'EPSG:4326':
+            gdf_cobertura_wgs84 = gdf_cobertura.to_crs('EPSG:4326')
+        else:
+            gdf_cobertura_wgs84 = gdf_cobertura
+        
         # Agregar la parroquia específica
-        st.write(f"Debug - Agregando parroquia: {len(parroquia_encontrada)} registros")
+        st.write(f"Debug - Agregando parroquia: {len(parroquia_wgs84)} registros")
         folium.GeoJson(
-            parroquia_encontrada,
+            parroquia_wgs84,
             name=f'Parroquia {parroquia}',
             style_function=lambda feature: {
                 'fillColor': 'blue',  # Azul para la parroquia
@@ -309,7 +327,7 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         # Detectar automáticamente la columna de cobertura para el mapa
         columna_cobertura_mapa = None
         for col in ['THRESHOLD', 'Float', 'LEVEL', 'COVERAGE']:
-            if col in gdf_cobertura.columns:
+            if col in gdf_cobertura_wgs84.columns:
                 columna_cobertura_mapa = col
                 break
         
@@ -338,13 +356,13 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 return f'Cobertura ({coverage_level} dBm)'
         
         # Agregar cada nivel de cobertura UMTS con su color correspondiente
-        st.write(f"Debug - Agregando {len(gdf_cobertura)} regiones de cobertura")
-        for idx, row in gdf_cobertura.iterrows():
+        st.write(f"Debug - Agregando {len(gdf_cobertura_wgs84)} regiones de cobertura")
+        for idx, row in gdf_cobertura_wgs84.iterrows():
             coverage_level = row[columna_cobertura_mapa]
             coverage_name = get_coverage_name({'properties': {columna_cobertura_mapa: coverage_level}})
             
             # Crear un GeoDataFrame con solo esta fila
-            single_region = gdf_cobertura.iloc[[idx]]
+            single_region = gdf_cobertura_wgs84.iloc[[idx]]
             
             # Agregar la capa de cobertura
             folium.GeoJson(
@@ -365,6 +383,9 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 geometry=[interseccion],
                 crs=parroquia_encontrada.crs
             )
+            # Convertir a WGS84 si es necesario
+            if interseccion_gdf.crs != 'EPSG:4326':
+                interseccion_gdf = interseccion_gdf.to_crs('EPSG:4326')
             
             folium.GeoJson(
                 interseccion_gdf,
@@ -379,11 +400,8 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             ).add_to(mapa)
         
         # Agregar la geometría unificada como capa separada
-        if geometria_unificada:
-            geometria_unificada_gdf = gpd.GeoDataFrame(
-                geometry=[geometria_unificada],
-                crs=parroquia_encontrada.crs
-            )
+        if geometria_wgs84:
+            geometria_unificada_gdf = geometria_wgs84
             
             folium.GeoJson(
                 geometria_unificada_gdf,
