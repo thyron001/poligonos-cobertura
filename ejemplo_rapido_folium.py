@@ -5,6 +5,14 @@ Script para crear mapas interactivos de parroquias específicas con cobertura UM
 Ahora usa archivos GeoJSON por provincia para mejor rendimiento y organización
 """
 
+import sys
+import os
+# Configurar codificación UTF-8 para Windows
+if sys.platform.startswith('win'):
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
+
 import geopandas as gpd
 import folium
 from shapely.geometry import Polygon, MultiPolygon, LineString
@@ -121,9 +129,9 @@ def crear_geometria_unificada(intersecciones, parroquia_geom):
 def crear_mapa_parroquia_con_cobertura():
     """Crear mapa de una parroquia específica con cobertura UMTS"""
     # Configuración
-    NOMBRE_PARROQUIA = "BATAN"  # Cambiar aquí el nombre de la parroquia
+    NOMBRE_PARROQUIA = "GUACHAPALA"  # Cambiar aquí el nombre de la parroquia
     NOMBRE_PROVINCIA = "AZUAY"  # Cambiar aquí el nombre de la provincia
-    RUTA_UMTS = "AZUAY SHAPE/AZUAY_UMTS_JUN2023_v4_region.shp"
+    RUTA_UMTS = "AZUAY SHAPE/1. Azuay Cobertura GSM Semestre I 2025.shp"
     
     print(f"Buscando parroquia: {NOMBRE_PARROQUIA} en provincia: {NOMBRE_PROVINCIA}")
     
@@ -149,7 +157,7 @@ def crear_mapa_parroquia_con_cobertura():
                 coincidencias = gdf_parroquias[gdf_parroquias[campo].str.upper().str.contains(NOMBRE_PARROQUIA.upper(), na=False)]
                 if len(coincidencias) > 0:
                     parroquia_encontrada = coincidencias
-                    print(f"¡Encontrada! {len(coincidencias)} coincidencias en '{campo}'")
+                    print(f"Encontrada! {len(coincidencias)} coincidencias en '{campo}'")
                     break
         
         if parroquia_encontrada is not None:
@@ -174,31 +182,31 @@ def crear_mapa_parroquia_con_cobertura():
                 style_function=lambda feature: {
                     'fillColor': 'blue',  # Azul para la parroquia
                     'color': '#000000',      # Borde negro
-                    'weight': 2,             # Grosor del borde
+                    'weight': 0.5,           # Grosor del borde muy delgado
                     'fillOpacity': 0.7       # Transparencia
                 }
             ).add_to(mapa)
             
             # Función para determinar el color según el nivel de cobertura
             def get_color_by_coverage(feature):
-                coverage_level = feature['properties']['Float']
-                if coverage_level == -85.0:  # Nivel alto
+                coverage_level = feature['properties']['THRESHOLD']
+                if coverage_level == -85:  # Nivel alto
                     return '#00FF00'  # Verde intenso
-                elif coverage_level == -95.0:  # Nivel medio
+                elif coverage_level == -95:  # Nivel medio
                     return '#FFFF99'  # Amarillo pastel
-                elif coverage_level == -105.0:  # Nivel bajo
+                elif coverage_level == -105:  # Nivel bajo
                     return '#FFB3B3'  # Rojo pastel
                 else:
                     return '#808080'  # Gris por defecto
             
             # Función para obtener el nombre del nivel de cobertura
             def get_coverage_name(feature):
-                coverage_level = feature['properties']['Float']
-                if coverage_level == -85.0:
+                coverage_level = feature['properties']['THRESHOLD']
+                if coverage_level == -85:
                     return 'Cobertura Alta (-85 dBm)'
-                elif coverage_level == -95.0:
+                elif coverage_level == -95:
                     return 'Cobertura Media (-95 dBm)'
-                elif coverage_level == -105.0:
+                elif coverage_level == -105:
                     return 'Cobertura Baja (-105 dBm)'
                 else:
                     return f'Cobertura ({coverage_level} dBm)'
@@ -208,8 +216,8 @@ def crear_mapa_parroquia_con_cobertura():
             
             # Agregar cada nivel de cobertura UMTS con su color correspondiente
             for idx, row in gdf_umts.iterrows():
-                coverage_level = row['Float']
-                coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
+                coverage_level = row['THRESHOLD']
+                coverage_name = get_coverage_name({'properties': {'THRESHOLD': coverage_level}})
                 
                 # Crear un GeoDataFrame con solo esta fila
                 single_region = gdf_umts.iloc[[idx]]
@@ -219,16 +227,16 @@ def crear_mapa_parroquia_con_cobertura():
                     single_region,
                     name=coverage_name,
                     style_function=lambda feature, level=coverage_level: {
-                        'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
+                        'fillColor': get_color_by_coverage({'properties': {'THRESHOLD': level}}),
                         'color': '#000000',      # Borde negro
-                        'weight': 1,             # Grosor del borde
+                        'weight': 0.3,           # Grosor del borde muy delgado
                         'fillOpacity': 0.6       # Transparencia
                     },
                     tooltip=coverage_name
                 ).add_to(mapa)
                 
                 # Si es cobertura alta, calcular intersección con la parroquia
-                if coverage_level == -85.0:
+                if coverage_level == -85:
                     print(f"Calculando intersección con cobertura alta...")
                     
                     # Obtener la geometría de la parroquia y la zona de cobertura alta
@@ -241,12 +249,12 @@ def crear_mapa_parroquia_con_cobertura():
                         
                         if not interseccion.is_empty:
                             intersecciones.append(interseccion)
-                            print(f"✅ Intersección encontrada")
+                            print(f"Interseccion encontrada")
                         else:
-                            print(f"ℹ️ No hay intersección entre {NOMBRE_PARROQUIA} y la zona de cobertura alta")
+                            print(f"No hay interseccion entre {NOMBRE_PARROQUIA} y la zona de cobertura alta")
                             
                     except Exception as e:
-                        print(f"⚠️ Error al calcular intersección: {e}")
+                        print(f"Error al calcular interseccion: {e}")
             
             # Si hay intersecciones, procesarlas
             if intersecciones:
@@ -272,7 +280,7 @@ def crear_mapa_parroquia_con_cobertura():
                             style_function=lambda feature: {
                                 'fillColor': '#FF0000',  # Rojo intenso
                                 'color': '#000000',      # Borde negro
-                                'weight': 3,             # Grosor del borde mayor
+                                'weight': 0.5,           # Grosor del borde muy delgado
                                 'fillOpacity': 0.8       # Transparencia menor
                             },
                             tooltip=f'Intersección {i+1}: {NOMBRE_PARROQUIA} + Cobertura Alta'
@@ -366,7 +374,7 @@ def crear_mapa_parroquia_con_cobertura():
                             style_function=lambda feature: {
                                 'fillColor': '#FF6600',  # Naranja para diferenciar
                                 'color': '#800080',      # Borde morado
-                                'weight': 3,             # Borde más grueso
+                                'weight': 0.5,           # Borde muy delgado
                                 'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
                             },
                             tooltip=f'Geometría Unificada: {NOMBRE_PARROQUIA} + Cobertura Alta (Exportada a KMZ)'
@@ -452,12 +460,12 @@ def crear_mapa_parroquia_con_cobertura():
             print(f"  - Número de regiones UMTS: {len(gdf_umts)}")
             print(f"  - Niveles de cobertura:")
             for idx, row in gdf_umts.iterrows():
-                level = row['Float']
-                if level == -85.0:
+                level = row['THRESHOLD']
+                if level == -85:
                     print(f"    * Alta (-85 dBm): Verde intenso")
-                elif level == -95.0:
+                elif level == -95:
                     print(f"    * Media (-95 dBm): Amarillo pastel")
-                elif level == -105.0:
+                elif level == -105:
                     print(f"    * Baja (-105 dBm): Rojo pastel")
             
             if intersecciones:

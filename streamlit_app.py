@@ -159,12 +159,27 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
         # Lista para almacenar las intersecciones
         intersecciones = []
         
+        # Detectar automáticamente la columna de cobertura
+        columna_cobertura = None
+        for col in ['THRESHOLD', 'Float', 'LEVEL', 'COVERAGE']:
+            if col in gdf_cobertura.columns:
+                columna_cobertura = col
+                break
+        
+        if columna_cobertura is None:
+            st.error("❌ No se encontró columna de cobertura en el archivo SHP")
+            return None, None, None, None
+        
+        st.write(f"✅ Usando columna de cobertura: {columna_cobertura}")
+        st.write(f"📊 Columnas disponibles en el SHP: {list(gdf_cobertura.columns)}")
+        st.write(f"📊 Niveles de cobertura encontrados: {sorted(gdf_cobertura[columna_cobertura].unique())}")
+        
         # Procesar cada nivel de cobertura
         for idx, row in gdf_cobertura.iterrows():
-            coverage_level = row['Float']
+            coverage_level = row[columna_cobertura]
             
             # Si es cobertura alta, calcular intersección con la parroquia
-            if coverage_level == -85.0:
+            if coverage_level == -85 or coverage_level == -85.0:
                 # Obtener la geometría de la parroquia y la zona de cobertura alta
                 parroquia_geom = parroquia_encontrada.geometry.iloc[0]
                 cobertura_geom = row.geometry
@@ -286,31 +301,38 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             style_function=lambda feature: {
                 'fillColor': 'blue',  # Azul para la parroquia
                 'color': '#000000',      # Borde negro
-                'weight': 2,             # Grosor del borde
+                'weight': 0.5,           # Grosor del borde muy delgado
                 'fillOpacity': 0.7       # Transparencia
             }
         ).add_to(mapa)
         
+        # Detectar automáticamente la columna de cobertura para el mapa
+        columna_cobertura_mapa = None
+        for col in ['THRESHOLD', 'Float', 'LEVEL', 'COVERAGE']:
+            if col in gdf_cobertura.columns:
+                columna_cobertura_mapa = col
+                break
+        
         # Función para determinar el color según el nivel de cobertura
         def get_color_by_coverage(feature):
-            coverage_level = feature['properties']['Float']
-            if coverage_level == -85.0:  # Nivel alto
+            coverage_level = feature['properties'][columna_cobertura_mapa]
+            if coverage_level == -85 or coverage_level == -85.0:  # Nivel alto
                 return '#00FF00'  # Verde intenso
-            elif coverage_level == -95.0:  # Nivel medio
+            elif coverage_level == -95 or coverage_level == -95.0:  # Nivel medio
                 return '#FFFF99'  # Amarillo pastel
-            elif coverage_level == -105.0:  # Nivel bajo
+            elif coverage_level == -105 or coverage_level == -105.0:  # Nivel bajo
                 return '#FFB3B3'  # Rojo pastel
             else:
                 return '#808080'  # Gris por defecto
         
         # Función para obtener el nombre del nivel de cobertura
         def get_coverage_name(feature):
-            coverage_level = feature['properties']['Float']
-            if coverage_level == -85.0:
+            coverage_level = feature['properties'][columna_cobertura_mapa]
+            if coverage_level == -85 or coverage_level == -85.0:
                 return 'Cobertura Alta (-85 dBm)'
-            elif coverage_level == -95.0:
+            elif coverage_level == -95 or coverage_level == -95.0:
                 return 'Cobertura Media (-95 dBm)'
-            elif coverage_level == -105.0:
+            elif coverage_level == -105 or coverage_level == -105.0:
                 return 'Cobertura Baja (-105 dBm)'
             else:
                 return f'Cobertura ({coverage_level} dBm)'
@@ -318,8 +340,8 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         # Agregar cada nivel de cobertura UMTS con su color correspondiente
         st.write(f"Debug - Agregando {len(gdf_cobertura)} regiones de cobertura")
         for idx, row in gdf_cobertura.iterrows():
-            coverage_level = row['Float']
-            coverage_name = get_coverage_name({'properties': {'Float': coverage_level}})
+            coverage_level = row[columna_cobertura_mapa]
+            coverage_name = get_coverage_name({'properties': {columna_cobertura_mapa: coverage_level}})
             
             # Crear un GeoDataFrame con solo esta fila
             single_region = gdf_cobertura.iloc[[idx]]
@@ -329,9 +351,9 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 single_region,
                 name=coverage_name,
                 style_function=lambda feature, level=coverage_level: {
-                    'fillColor': get_color_by_coverage({'properties': {'Float': level}}),
+                    'fillColor': get_color_by_coverage({'properties': {columna_cobertura_mapa: level}}),
                     'color': '#000000',      # Borde negro
-                    'weight': 1,             # Grosor del borde
+                    'weight': 0.3,           # Grosor del borde muy delgado
                     'fillOpacity': 0.6       # Transparencia
                 },
                 tooltip=coverage_name
@@ -350,7 +372,7 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 style_function=lambda feature: {
                     'fillColor': '#FF0000',  # Rojo intenso
                     'color': '#000000',      # Borde negro
-                    'weight': 3,             # Grosor del borde mayor
+                    'weight': 0.5,           # Grosor del borde muy delgado
                     'fillOpacity': 0.8       # Transparencia menor
                 },
                 tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
@@ -369,7 +391,7 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 style_function=lambda feature: {
                     'fillColor': '#FF6600',  # Naranja para diferenciar
                     'color': '#800080',      # Borde morado
-                    'weight': 3,             # Borde más grueso
+                    'weight': 0.5,           # Borde muy delgado
                     'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
                 },
                 tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
