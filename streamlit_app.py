@@ -378,8 +378,8 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
             ).add_to(mapa)
         
-        # Agregar la geometría unificada como capa separada
-        if geometria_unificada:
+        # Agregar la geometría unificada como capa separada (solo si existe)
+        if geometria_unificada and not geometria_unificada.is_empty:
             geometria_unificada_gdf = gpd.GeoDataFrame(
                 geometry=[geometria_unificada],
                 crs=parroquia_encontrada.crs
@@ -401,18 +401,27 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         folium.LayerControl().add_to(mapa)
         
         # Agregar leyenda de colores actualizada
-        legend_html = '''
+        legend_items = [
+            '<p><b>Leyenda del Mapa</b></p>',
+            '<p><i class="fa fa-square" style="color:#00FF00"></i> Cobertura Alta (-85 dBm)</p>',
+            '<p><i class="fa fa-square" style="color:#FFFF99"></i> Cobertura Media (-95 dBm)</p>',
+            '<p><i class="fa fa-square" style="color:#FFB3B3"></i> Cobertura Baja (-105 dBm)</p>',
+            '<p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>'
+        ]
+        
+        # Solo agregar elementos de intersección si existen
+        if intersecciones:
+            legend_items.append('<p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>')
+        
+        if geometria_unificada and not geometria_unificada.is_empty:
+            legend_items.append('<p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>')
+        
+        legend_html = f'''
         <div style="position: fixed; 
                     bottom: 50px; left: 50px; width: 280px; height: auto; 
                     background-color: white; border:2px solid grey; z-index:9999; 
                     font-size:14px; padding: 10px">
-        <p><b>Leyenda del Mapa</b></p>
-        <p><i class="fa fa-square" style="color:#00FF00"></i> Cobertura Alta (-85 dBm)</p>
-        <p><i class="fa fa-square" style="color:#FFFF99"></i> Cobertura Media (-95 dBm)</p>
-        <p><i class="fa fa-square" style="color:#FFB3B3"></i> Cobertura Baja (-105 dBm)</p>
-        <p><i class="fa fa-square" style="color:blue"></i> Parroquia</p>
-        <p><i class="fa fa-square" style="color:#FF0000"></i> Intersecciones Separadas (Parroquia + Cobertura Alta)</p>
-        <p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>
+        {''.join(legend_items)}
         </div>
         '''
         mapa.get_root().html.add_child(folium.Element(legend_html))
@@ -552,16 +561,17 @@ if convertir and archivos_completos and parroquia:
         st.write(f"Debug - intersecciones: {len(intersecciones) if intersecciones else 0}")
         st.write(f"Debug - gdf_cobertura: {gdf_cobertura is not None}")
         
-        if geometria_unificada is not None:
-            # Crear el mapa
-            mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
+        # Crear el mapa siempre, independientemente de si hay intersecciones
+        mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
+        
+        st.write(f"Debug - mapa creado: {mapa is not None}")
+        
+        if mapa:
+            # Mostrar el mapa
+            components.html(mapa._repr_html_(), height=600)
             
-            st.write(f"Debug - mapa creado: {mapa is not None}")
-            
-            if mapa:
-                # Mostrar el mapa
-                components.html(mapa._repr_html_(), height=600)
-                
+            # Solo mostrar botón de descarga si hay geometría unificada
+            if geometria_unificada is not None:
                 # Crear y mostrar botón de descarga
                 nombre_archivo = f"{parroquia.upper()}_{operadora.upper()}_{año}_{tecnologia}.kmz"
                 
@@ -585,9 +595,9 @@ if convertir and archivos_completos and parroquia:
                 else:
                     st.error("❌ Error al generar el archivo KMZ")
             else:
-                st.error("❌ Error al crear el mapa")
+                st.info("ℹ️ No se encontraron intersecciones entre la parroquia y la cobertura alta, por lo que no hay geometría unificada para descargar.")
         else:
-            st.error("❌ No se pudo procesar la cobertura")
+            st.error("❌ Error al crear el mapa")
 else:
     if not archivos_completos:
         st.info("👆 Arrastra los 4 archivos del shapefile")
