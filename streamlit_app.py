@@ -349,13 +349,28 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
         debug_container_map.write(f"📍 Centroide real de la geometría: Lat={centroide_real.y:.6f}, Lon={centroide_real.x:.6f}")
         st.write(f"🚨 DEBUG PERSISTENTE - Centroide real: Lat={centroide_real.y:.6f}, Lon={centroide_real.x:.6f}")
         
-        # Usar el centroide real en lugar del centro de bounds para mayor precisión
-        debug_container_map.write("🔄 Usando centroide real en lugar de centro de bounds...")
-        st.write("🚨 DEBUG PERSISTENTE - Usando centroide real...")
-        center_lat = centroide_real.y
-        center_lon = centroide_real.x
-        debug_container_map.write(f"📍 Centro actualizado con centroide: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Centro actualizado: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
+        # CONVERTIR COORDENADAS: Las coordenadas están en sistema proyectado, necesitamos convertir a WGS84
+        debug_container_map.write("🔄 Convirtiendo coordenadas del sistema proyectado a WGS84...")
+        st.write("🚨 DEBUG PERSISTENTE - Convirtiendo coordenadas a WGS84...")
+        
+        # Crear un GeoDataFrame temporal para la conversión
+        temp_gdf = gpd.GeoDataFrame([1], geometry=[centroide_real], crs=parroquia_encontrada.crs)
+        st.write(f"🚨 DEBUG PERSISTENTE - CRS original: {parroquia_encontrada.crs}")
+        
+        # Convertir a WGS84 (EPSG:4326)
+        temp_gdf_wgs84 = temp_gdf.to_crs('EPSG:4326')
+        centroide_wgs84 = temp_gdf_wgs84.geometry.iloc[0]
+        
+        debug_container_map.write(f"📍 Centroide en WGS84: Lat={centroide_wgs84.y:.6f}, Lon={centroide_wgs84.x:.6f}")
+        st.write(f"🚨 DEBUG PERSISTENTE - Centroide en WGS84: Lat={centroide_wgs84.y:.6f}, Lon={centroide_wgs84.x:.6f}")
+        
+        # Usar el centroide convertido a WGS84
+        debug_container_map.write("🔄 Usando centroide convertido a WGS84...")
+        st.write("🚨 DEBUG PERSISTENTE - Usando centroide WGS84...")
+        center_lat = centroide_wgs84.y
+        center_lon = centroide_wgs84.x
+        debug_container_map.write(f"📍 Centro actualizado con centroide WGS84: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
+        st.write(f"🚨 DEBUG PERSISTENTE - Centro actualizado WGS84: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
         
         # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
         debug_container_map.write("🔍 Verificando coordenadas válidas...")
