@@ -297,153 +297,66 @@ def procesar_cobertura(archivo_shp, archivo_shx, archivo_dbf, archivo_prj, provi
 def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura):
     """Crear mapa de Folium - EXACTO del ejemplo_rapido_folium.py"""
     try:
-        # DEBUG: Verificar datos de entrada
-        debug_container_map = st.empty()
-        debug_container_map.write("🔍 DEBUG MAPA - Verificando datos de entrada...")
-        
-        # DEBUG PERSISTENTE: No se limpia
-        st.write("🚨 DEBUG PERSISTENTE - Iniciando crear_mapa_folium")
-        st.write(f"🚨 parroquia_encontrada is None: {parroquia_encontrada is None}")
-        if parroquia_encontrada is not None:
-            st.write(f"🚨 parroquia_encontrada length: {len(parroquia_encontrada)}")
-        st.write(f"🚨 geometria_unificada is None: {geometria_unificada is None}")
-        st.write(f"🚨 intersecciones length: {len(intersecciones) if intersecciones else 0}")
-        st.write(f"🚨 gdf_cobertura is None: {gdf_cobertura is None}")
-        if gdf_cobertura is not None:
-            st.write(f"🚨 gdf_cobertura length: {len(gdf_cobertura)}")
-        
         # Verificar parroquia_encontrada
         if parroquia_encontrada is None:
-            debug_container_map.write("❌ ERROR: parroquia_encontrada es None")
             return None
         
         if len(parroquia_encontrada) == 0:
-            debug_container_map.write("❌ ERROR: parroquia_encontrada está vacía")
             return None
         
-        # Calcular el centro de la parroquia para centrar el mapa
-        debug_container_map.write("🔍 Buscando centro de parroquia...")
-        st.write("🚨 DEBUG PERSISTENTE - Buscando centro de parroquia...")
+        # Calcular el centro de la geometría unificada para centrar el mapa
+        if geometria_unificada and not geometria_unificada.is_empty:
+            # Usar la geometría unificada
+            geometria_para_centro = geometria_unificada
+        else:
+            # Si no hay geometría unificada, usar la parroquia como fallback
+            geometria_para_centro = parroquia_encontrada.geometry.iloc[0]
         
-        # Obtener la geometría de la parroquia
-        parroquia_geom = parroquia_encontrada.geometry.iloc[0]
-        debug_container_map.write(f"📐 Geometría de la parroquia: {type(parroquia_geom)}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Geometría de la parroquia: {type(parroquia_geom)}")
+        # Calcular el centroide de la geometría seleccionada
+        centroide_real = geometria_para_centro.centroid
         
-        # Calcular bounds
-        bounds = parroquia_geom.bounds
-        debug_container_map.write(f"📐 Bounds de la parroquia: {bounds}")
-        debug_container_map.write(f"📐 Bounds formato: min_x={bounds[0]:.6f}, min_y={bounds[1]:.6f}, max_x={bounds[2]:.6f}, max_y={bounds[3]:.6f}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Bounds: {bounds}")
-        
-        # Calcular centro
-        center_lat = (bounds[1] + bounds[3]) / 2  # (min_y + max_y) / 2
-        center_lon = (bounds[0] + bounds[2]) / 2  # (min_x + max_x) / 2
-        
-        debug_container_map.write(f"📍 Centro calculado: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
-        debug_container_map.write(f"📍 Centro calculado: Lat={center_lat}, Lon={center_lon}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Centro calculado: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
-        
-        # También calcular el centroide real de la geometría
-        centroide_real = parroquia_geom.centroid
-        debug_container_map.write(f"📍 Centroide real de la geometría: Lat={centroide_real.y:.6f}, Lon={centroide_real.x:.6f}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Centroide real: Lat={centroide_real.y:.6f}, Lon={centroide_real.x:.6f}")
-        
-        # CONVERTIR COORDENADAS: Las coordenadas están en sistema proyectado, necesitamos convertir a WGS84
-        debug_container_map.write("🔄 Convirtiendo coordenadas del sistema proyectado a WGS84...")
-        st.write("🚨 DEBUG PERSISTENTE - Convirtiendo coordenadas a WGS84...")
-        
-        # Crear un GeoDataFrame temporal para la conversión
+        # Crear un GeoDataFrame temporal para la conversión de coordenadas
         temp_gdf = gpd.GeoDataFrame([1], geometry=[centroide_real], crs=parroquia_encontrada.crs)
-        st.write(f"🚨 DEBUG PERSISTENTE - CRS original: {parroquia_encontrada.crs}")
         
         # Convertir a WGS84 (EPSG:4326)
         temp_gdf_wgs84 = temp_gdf.to_crs('EPSG:4326')
         centroide_wgs84 = temp_gdf_wgs84.geometry.iloc[0]
         
-        debug_container_map.write(f"📍 Centroide en WGS84: Lat={centroide_wgs84.y:.6f}, Lon={centroide_wgs84.x:.6f}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Centroide en WGS84: Lat={centroide_wgs84.y:.6f}, Lon={centroide_wgs84.x:.6f}")
-        
         # Usar el centroide convertido a WGS84
-        debug_container_map.write("🔄 Usando centroide convertido a WGS84...")
-        st.write("🚨 DEBUG PERSISTENTE - Usando centroide WGS84...")
         center_lat = centroide_wgs84.y
         center_lon = centroide_wgs84.x
-        debug_container_map.write(f"📍 Centro actualizado con centroide WGS84: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Centro actualizado WGS84: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
         
         # Verificar que las coordenadas sean válidas (Ecuador está en lat -2 a 1, lon -92 a -75)
-        debug_container_map.write("🔍 Verificando coordenadas válidas...")
-        debug_container_map.write(f"🔍 Latitud en rango (-5 a 5): {-5 < center_lat < 5}")
-        debug_container_map.write(f"🔍 Longitud en rango (-95 a -70): {-95 < center_lon < -70}")
-        st.write("🚨 DEBUG PERSISTENTE - Verificando coordenadas válidas...")
-        st.write(f"🚨 DEBUG PERSISTENTE - Latitud en rango: {-5 < center_lat < 5}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Longitud en rango: {-95 < center_lon < -70}")
-        
         if not (-5 < center_lat < 5) or not (-95 < center_lon < -70):
-            debug_container_map.write(f"⚠️ Coordenadas fuera de rango, usando centro de Ecuador")
-            debug_container_map.write(f"⚠️ Lat original: {center_lat}, Lon original: {center_lon}")
-            st.write(f"🚨 DEBUG PERSISTENTE - Coordenadas fuera de rango, corrigiendo...")
             center_lat, center_lon = -2.0, -78.0  # Centro de Ecuador
-            debug_container_map.write(f"⚠️ Lat corregida: {center_lat}, Lon corregida: {center_lon}")
-            st.write(f"🚨 DEBUG PERSISTENTE - Coordenadas corregidas: Lat={center_lat}, Lon={center_lon}")
-        else:
-            debug_container_map.write("✅ Coordenadas dentro del rango válido")
-            st.write("🚨 DEBUG PERSISTENTE - Coordenadas dentro del rango válido")
         
-        debug_container_map.write(f"🎯 Centro final para el mapa: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
-        debug_container_map.write(f"🎯 Centro final para el mapa: Lat={center_lat}, Lon={center_lon}")
-        st.write(f"🚨 DEBUG PERSISTENTE - Centro final: Lat={center_lat:.6f}, Lon={center_lon:.6f}")
-        
-        # Crear mapa centrado en la parroquia
-        debug_container_map.write("🗺️ Creando mapa de Folium...")
-        debug_container_map.write(f"🗺️ Usando location=[{center_lat}, {center_lon}]")
-        debug_container_map.write(f"🗺️ Usando zoom_start=12")
-        st.write("🚨 DEBUG PERSISTENTE - Creando mapa de Folium...")
-        st.write(f"🚨 DEBUG PERSISTENTE - Location: [{center_lat}, {center_lon}]")
-        
+        # Crear mapa centrado en la geometría unificada
         mapa = folium.Map(
             location=[center_lat, center_lon],
             zoom_start=12,
             tiles='OpenStreetMap'
         )
         
-        debug_container_map.write("✅ Mapa de Folium creado exitosamente")
-        debug_container_map.write(f"✅ Mapa creado con centro: {mapa.location}")
-        debug_container_map.write(f"✅ Mapa creado con zoom: {mapa.options.get('zoom', 'No definido')}")
-        st.write("🚨 DEBUG PERSISTENTE - Mapa creado exitosamente")
-        st.write(f"🚨 DEBUG PERSISTENTE - Mapa centro: {mapa.location}")
-        
         # Agregar la parroquia específica
-        debug_container_map.write("🔵 Agregando parroquia al mapa...")
-        try:
-            folium.GeoJson(
-                parroquia_encontrada,
-                name=f'Parroquia {parroquia}',
-                style_function=lambda feature: {
-                    'fillColor': 'blue',  # Azul para la parroquia
-                    'color': '#000000',      # Borde negro
-                    'weight': 0.5,           # Grosor del borde muy delgado
-                    'fillOpacity': 0.7       # Transparencia
-                }
-            ).add_to(mapa)
-            debug_container_map.write("✅ Parroquia agregada exitosamente")
-        except Exception as e:
-            debug_container_map.write(f"❌ ERROR al agregar parroquia: {e}")
-            return None
+        folium.GeoJson(
+            parroquia_encontrada,
+            name=f'Parroquia {parroquia}',
+            style_function=lambda feature: {
+                'fillColor': 'blue',  # Azul para la parroquia
+                'color': '#000000',      # Borde negro
+                'weight': 0.5,           # Grosor del borde muy delgado
+                'fillOpacity': 0.7       # Transparencia
+            }
+        ).add_to(mapa)
         
         # Detectar automáticamente la columna de cobertura para el mapa
-        debug_container_map.write("🔍 Detectando columna de cobertura...")
         columna_cobertura_mapa = None
         for col in ['THRESHOLD', 'Float', 'LEVEL', 'COVERAGE']:
             if col in gdf_cobertura.columns:
                 columna_cobertura_mapa = col
                 break
         
-        if columna_cobertura_mapa:
-            debug_container_map.write(f"✅ Columna de cobertura encontrada: {columna_cobertura_mapa}")
-        else:
-            debug_container_map.write("❌ ERROR: No se encontró columna de cobertura")
+        if not columna_cobertura_mapa:
             return None
         
         # Función para determinar el color según el nivel de cobertura
@@ -471,8 +384,6 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
                 return f'Cobertura ({coverage_level} dBm)'
         
         # Agregar cada nivel de cobertura UMTS con su color correspondiente
-        debug_container_map.write(f"📊 Procesando {len(gdf_cobertura)} regiones de cobertura...")
-        capas_agregadas = 0
         for idx, row in gdf_cobertura.iterrows():
             coverage_level = row[columna_cobertura_mapa]
             coverage_name = get_coverage_name({'properties': {columna_cobertura_mapa: coverage_level}})
@@ -480,85 +391,59 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             # Crear un GeoDataFrame con solo esta fila
             single_region = gdf_cobertura.iloc[[idx]]
             
-            try:
-                # Agregar la capa de cobertura
-                folium.GeoJson(
-                    single_region,
-                    name=coverage_name,
-                    style_function=lambda feature, level=coverage_level: {
-                        'fillColor': get_color_by_coverage({'properties': {columna_cobertura_mapa: level}}),
-                        'color': '#000000',      # Borde negro
-                        'weight': 0.3,           # Grosor del borde muy delgado
-                        'fillOpacity': 0.6       # Transparencia
-                    },
-                    tooltip=coverage_name
-                ).add_to(mapa)
-                capas_agregadas += 1
-            except Exception as e:
-                debug_container_map.write(f"⚠️ Error al agregar capa {idx}: {e}")
-        
-        debug_container_map.write(f"✅ {capas_agregadas} capas de cobertura agregadas")
+            # Agregar la capa de cobertura
+            folium.GeoJson(
+                single_region,
+                name=coverage_name,
+                style_function=lambda feature, level=coverage_level: {
+                    'fillColor': get_color_by_coverage({'properties': {columna_cobertura_mapa: level}}),
+                    'color': '#000000',      # Borde negro
+                    'weight': 0.3,           # Grosor del borde muy delgado
+                    'fillOpacity': 0.6       # Transparencia
+                },
+                tooltip=coverage_name
+            ).add_to(mapa)
         
         # Mostrar cada intersección por separado (para visualización)
-        debug_container_map.write(f"🔴 Procesando {len(intersecciones)} intersecciones...")
-        intersecciones_agregadas = 0
         for i, interseccion in enumerate(intersecciones):
-            try:
-                interseccion_gdf = gpd.GeoDataFrame(
-                    geometry=[interseccion],
-                    crs=parroquia_encontrada.crs
-                )
-                
-                folium.GeoJson(
-                    interseccion_gdf,
-                    name=f'Intersección {i+1} {parroquia} - Cobertura Alta',
-                    style_function=lambda feature: {
-                        'fillColor': '#FF0000',  # Rojo intenso
-                        'color': '#000000',      # Borde negro
-                        'weight': 0.5,           # Grosor del borde muy delgado
-                        'fillOpacity': 0.8       # Transparencia menor
-                    },
-                    tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
-                ).add_to(mapa)
-                intersecciones_agregadas += 1
-            except Exception as e:
-                debug_container_map.write(f"⚠️ Error al agregar intersección {i+1}: {e}")
-        
-        debug_container_map.write(f"✅ {intersecciones_agregadas} intersecciones agregadas")
+            interseccion_gdf = gpd.GeoDataFrame(
+                geometry=[interseccion],
+                crs=parroquia_encontrada.crs
+            )
+            
+            folium.GeoJson(
+                interseccion_gdf,
+                name=f'Intersección {i+1} {parroquia} - Cobertura Alta',
+                style_function=lambda feature: {
+                    'fillColor': '#FF0000',  # Rojo intenso
+                    'color': '#000000',      # Borde negro
+                    'weight': 0.5,           # Grosor del borde muy delgado
+                    'fillOpacity': 0.8       # Transparencia menor
+                },
+                tooltip=f'Intersección {i+1}: {parroquia} + Cobertura Alta'
+            ).add_to(mapa)
         
         # Agregar la geometría unificada como capa separada (solo si existe)
         if geometria_unificada and not geometria_unificada.is_empty:
-            debug_container_map.write("🟠 Agregando geometría unificada...")
-            try:
-                geometria_unificada_gdf = gpd.GeoDataFrame(
-                    geometry=[geometria_unificada],
-                    crs=parroquia_encontrada.crs
-                )
-                
-                folium.GeoJson(
-                    geometria_unificada_gdf,
-                    name=f'Geometría Unificada {parroquia} - Cobertura Alta',
-                    style_function=lambda feature: {
-                        'fillColor': '#FF6600',  # Naranja para diferenciar
-                        'color': '#800080',      # Borde morado
-                        'weight': 0.5,           # Borde muy delgado
-                        'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
-                    },
-                    tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
-                ).add_to(mapa)
-                debug_container_map.write("✅ Geometría unificada agregada")
-            except Exception as e:
-                debug_container_map.write(f"⚠️ Error al agregar geometría unificada: {e}")
-        else:
-            debug_container_map.write("ℹ️ No hay geometría unificada para agregar")
+            geometria_unificada_gdf = gpd.GeoDataFrame(
+                geometry=[geometria_unificada],
+                crs=parroquia_encontrada.crs
+            )
+            
+            folium.GeoJson(
+                geometria_unificada_gdf,
+                name=f'Geometría Unificada {parroquia} - Cobertura Alta',
+                style_function=lambda feature: {
+                    'fillColor': '#FF6600',  # Naranja para diferenciar
+                    'color': '#800080',      # Borde morado
+                    'weight': 0.5,           # Borde muy delgado
+                    'fillOpacity': 0.4       # Menos transparente para mejor visibilidad
+                },
+                tooltip=f'Geometría Unificada: {parroquia} + Cobertura Alta (Exportada a KMZ)'
+            ).add_to(mapa)
         
         # Agregar controles de capas
-        debug_container_map.write("🎛️ Agregando controles de capas...")
-        try:
-            folium.LayerControl().add_to(mapa)
-            debug_container_map.write("✅ Controles de capas agregados")
-        except Exception as e:
-            debug_container_map.write(f"⚠️ Error al agregar controles de capas: {e}")
+        folium.LayerControl().add_to(mapa)
         
         # Agregar leyenda de colores actualizada
         legend_items = [
@@ -577,28 +462,19 @@ def crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parr
             legend_items.append('<p><i class="fa fa-square" style="color:#FF6600"></i> Geometría Unificada (Exportada a KMZ)</p>')
         
         # Agregar leyenda
-        debug_container_map.write("📋 Agregando leyenda...")
-        try:
-            legend_html = f'''
-            <div style="position: fixed; 
-                        bottom: 50px; left: 50px; width: 280px; height: auto; 
-                        background-color: white; border:2px solid grey; z-index:9999; 
-                        font-size:14px; padding: 10px">
-            {''.join(legend_items)}
-            </div>
-            '''
-            mapa.get_root().html.add_child(folium.Element(legend_html))
-            debug_container_map.write("✅ Leyenda agregada")
-        except Exception as e:
-            debug_container_map.write(f"⚠️ Error al agregar leyenda: {e}")
+        legend_html = f'''
+        <div style="position: fixed; 
+                    bottom: 50px; left: 50px; width: 280px; height: auto; 
+                    background-color: white; border:2px solid grey; z-index:9999; 
+                    font-size:14px; padding: 10px">
+        {''.join(legend_items)}
+        </div>
+        '''
+        mapa.get_root().html.add_child(folium.Element(legend_html))
         
-        debug_container_map.write("🎉 Mapa completado exitosamente")
         return mapa
         
     except Exception as e:
-        debug_container_map.write(f"❌ ERROR CRÍTICO en crear_mapa_folium: {e}")
-        import traceback
-        debug_container_map.write(f"📋 Traceback: {traceback.format_exc()}")
         return None
 
 # Barra lateral
@@ -729,17 +605,6 @@ if convertir and archivos_completos and parroquia:
         mapa_container = st.empty()
         mapa_container.write("Generando mapa...")
         
-        # DEBUG: Verificar datos antes de crear el mapa
-        st.write("🔍 DEBUG PRINCIPAL - Verificando datos antes de crear mapa:")
-        st.write(f"📍 geometria_unificada: {geometria_unificada is not None}")
-        st.write(f"📍 parroquia_encontrada: {parroquia_encontrada is not None}")
-        if parroquia_encontrada is not None:
-            st.write(f"📍 parroquia_encontrada length: {len(parroquia_encontrada)}")
-        st.write(f"📍 intersecciones: {len(intersecciones) if intersecciones else 0}")
-        st.write(f"📍 gdf_cobertura: {gdf_cobertura is not None}")
-        if gdf_cobertura is not None:
-            st.write(f"📍 gdf_cobertura length: {len(gdf_cobertura)}")
-        
         mapa = crear_mapa_folium(geometria_unificada, parroquia_encontrada, provincia, parroquia, intersecciones, gdf_cobertura)
         
         # Limpiar los mensajes de debug una vez que el mapa esté generado
@@ -752,17 +617,8 @@ if convertir and archivos_completos and parroquia:
         mapa_container.empty()
         
         if mapa:
-            st.write("✅ Mapa creado exitosamente")
             # Mostrar el mapa
-            try:
-                components.html(mapa._repr_html_(), height=600)
-                st.write("✅ Mapa mostrado exitosamente")
-            except Exception as e:
-                st.write(f"❌ ERROR al mostrar el mapa: {e}")
-                import traceback
-                st.write(f"📋 Traceback: {traceback.format_exc()}")
-        else:
-            st.write("❌ ERROR: El mapa no se pudo crear (mapa es None)")
+            components.html(mapa._repr_html_(), height=600)
         
         # Solo mostrar botón de descarga si hay geometría unificada
         if mapa and geometria_unificada is not None:
