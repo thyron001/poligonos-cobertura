@@ -563,7 +563,7 @@ if convertir and archivos_completos and parroquia:
                 components.html(mapa._repr_html_(), height=600)
                 
                 # Crear y mostrar botón de descarga
-                nombre_archivo = f"{parroquia.lower()}_{operadora.lower()}_{año}_{tecnologia}.kmz"
+                nombre_archivo = f"{parroquia.upper()}_{operadora.upper()}_{año}_{tecnologia}.kmz"
                 
                 # Crear GeoDataFrame para exportar
                 geometria_unificada_gdf = gpd.GeoDataFrame(
